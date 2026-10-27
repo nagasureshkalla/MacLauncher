@@ -208,5 +208,50 @@ def test_dynamic_island_states_and_switching(app, monkeypatch):
     assert activated == [12] and isl.state == "compact"
     isl._on_scroll(None, 0, 1)  # scroll down: next app
     assert activated[-1] == 21
+
+    # Auto-hide: slides away and reserves no space; touching the strip brings it back.
+    app.settings.set("island_reserve_space", True)
+    app.settings.set("island_autohide", True)
+    isl._do_hide()
+    assert isl.hidden and not isl.revealer.get_reveal_child()
+    if isl._xid:
+        assert x11._get_property(isl._xid, "_NET_WM_STRUT_PARTIAL", x11.XA_CARDINAL)[2] == bytes(12 * 8)
+    isl._on_area_enter()
+    assert not isl.hidden and isl.revealer.get_reveal_child()
+    app.settings.set("island_autohide", False)
+    isl._do_hide()
+    assert not isl.hidden  # never hides when auto-hide is off
+    app.settings.set("island_reserve_space", False)
     app.settings.set("island_enabled", False)
     assert spin(lambda: not isl.get_visible())
+
+
+def test_dock_icon_scales_one_texture_and_swaps_icons():
+    """The dock draws magnified icons from one texture rendered at the largest size."""
+    from gi.repository import Gio, Gtk
+    from nova_launcher.ui.dock import DockIcon
+
+    icon = DockIcon(Gio.ThemedIcon.new("user-trash"), 48, 77)
+    assert icon.measure(Gtk.Orientation.HORIZONTAL, -1)[:2] == (48, 48)
+    icon.set_size(70)
+    assert icon.measure(Gtk.Orientation.VERTICAL, -1)[:2] == (70, 70)
+    first = icon._icon()
+    assert first is not None and icon._icon() is first          # looked up once, then reused
+    icon.set_from_gicon(Gio.ThemedIcon.new("user-trash-full"))  # empty/full trash swap
+    assert icon._paintable is None and icon._icon() is not first
+    icon.set_size(90)                                           # magnification raised past max
+    assert icon.max_size == 90 and icon._paintable is None
+
+
+def test_dock_only_uses_methods_dock_icon_has():
+    """Every `.image.<method>(` call in dock.py must exist on DockIcon (it replaced Gtk.Image)."""
+    import re
+    from pathlib import Path
+
+    from nova_launcher.ui import dock
+
+    source = Path(dock.__file__).read_text()
+    used = set(re.findall(r"\.image\.(\w+)\(", source))
+    assert used, "expected dock.py to call methods on item images"
+    missing = [m for m in used if not hasattr(dock.DockIcon, m)]
+    assert not missing, f"DockIcon lacks {missing}"

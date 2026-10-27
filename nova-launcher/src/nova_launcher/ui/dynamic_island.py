@@ -10,7 +10,11 @@ pill morphs smoothly between them):
             labelled with its window title); click to switch, right-click
             for Close Window, New Window and Quit.
 
-Scrolling over the compact pill switches to the next/previous app.  Like the
+Scrolling over the compact pill switches to the next/previous app.
+
+Auto-hide (default): the pill slides up out of sight and windows get the
+full screen height; an invisible strip right under the GNOME top bar brings
+it back when the pointer touches it.  Like the
 dock, the window is fixed-size and transparent with the input region limited
 to the pill, so it never blocks clicks next to it.
 """
@@ -51,6 +55,8 @@ PEEK_ICONS = 3
 HOVER_OPEN_MS = 140
 HOVER_CLOSE_MS = 320
 TOAST_MS = 1800
+HOT_W, HOT_H = COMPACT_W + 80, 5  # invisible reveal strip under the top bar
+HIDE_MS = 600
 
 
 def island_width(n_apps: int) -> int:
@@ -167,13 +173,26 @@ class DynamicIsland(Gtk.Window):
         self._menu_open = False
         self._tracking = False
 
-        self.pill = IslandPill(halign=Gtk.Align.CENTER, valign=Gtk.Align.START)
+        self.hidden = False
+        self._hide_timer = 0
+        self.pill = IslandPill(halign=Gtk.Align.CENTER, valign=Gtk.Align.START, margin_top=TOP_GAP)
         self.pill.add_css_class("nova-island")
         self.stack = Gtk.Stack(interpolate_size=True, hhomogeneous=False, vhomogeneous=False,
                                transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.stack.connect("notify::transition-running", lambda *_: self._sync_region())
         self.pill.append(self.stack)
-        self.set_child(self.pill)
+        self.revealer = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN, reveal_child=True,
+                                     halign=Gtk.Align.CENTER, valign=Gtk.Align.START)
+        self.revealer.set_child(self.pill)
+        self.revealer.connect("notify::child-revealed", lambda *_: self._update_region())
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.append(self.revealer)
+        self.set_child(root)
+        # Whole input area (reveal strip + pill): drives auto-hide.
+        self._area = Gtk.EventControllerMotion()
+        self._area.connect("enter", lambda *_: self._on_area_enter())
+        self._area.connect("leave", lambda *_: self._schedule_hide())
+        root.add_controller(self._area)
 
         idle = Gtk.Box()
         idle.set_size_request(IDLE_W, COMPACT_H - 4)
@@ -242,6 +261,13 @@ class DynamicIsland(Gtk.Window):
     def _on_setting(self, key: str) -> None:
         if key in ("island_reserve_space", "island_monitor"):
             self._place()
+        elif key == "island_autohide":
+            self._place()
+            if self.app.settings[key]:
+                self._schedule_hide()
+            else:
+                self._cancel(("_hide_timer",))
+                self.reveal(True)
         elif key == "animation_level":
             self._set_page(self.state)
 
@@ -264,11 +290,11 @@ class DynamicIsland(Gtk.Window):
             # would include it.  The GNOME top bar is ~32 px.
             self._panel_h = max(0, min(wa.y - g.y, 64))
         x = g.x + (g.width - WIDTH) // 2
-        self.app.move_window(self, x, g.y + self._panel_h + TOP_GAP, mon)
+        self.app.move_window(self, x, g.y + self._panel_h, mon)
         mons = self.app.all_monitor_infos()
         root = (max(m.geometry.x + m.geometry.width for m in mons),
                 max(m.geometry.y + m.geometry.height for m in mons)) if mons else (0, 0)
-        thickness = reserve_thickness(self._panel_h) if reserve else 0
+        thickness = reserve_thickness(self._panel_h) if reserve and not self.autohide else 0
         x11.set_strut(self._xid, x11.strut_values("top", thickness, (g.x, g.y, g.width, g.height), root))
         self._sync_region()
         return GLib.SOURCE_REMOVE
@@ -277,6 +303,37 @@ class DynamicIsland(Gtk.Window):
         self.set_focusable(False)
         self.set_visible(True)
         self._render()
+        self._schedule_hide(2000)  # show it briefly at login so it can be found
+
+    # -- auto-hide ---------------------------------------------------------------------
+    @property
+    def autohide(self) -> bool:
+        return self.app.settings["island_autohide"]
+
+    def reveal(self, show: bool) -> None:
+        self.hidden = not show
+        self.revealer.set_transition_duration(220 if self.app.animations_enabled() else 0)
+        self.revealer.set_reveal_child(show)
+        self._update_region()
+
+    def _on_area_enter(self) -> None:
+        self._cancel(("_hide_timer",))
+        if self.hidden:
+            self.reveal(True)
+
+    def _schedule_hide(self, delay: int = HIDE_MS) -> None:
+        self._cancel(("_hide_timer",))
+        if self.autohide:
+            self._hide_timer = GLib.timeout_add(delay, self._do_hide)
+
+    def _do_hide(self) -> bool:
+        self._hide_timer = 0
+        if not self.autohide or self._area.contains_pointer() or self._menu_open or self.state == "toast":
+            return GLib.SOURCE_REMOVE  # leave / menu close / toast end reschedule it
+        if self.state == "expanded":
+            self.collapse()
+        self.reveal(False)
+        return GLib.SOURCE_REMOVE
 
     # -- data --------------------------------------------------------------------------
     def _on_windows_changed(self) -> None:
@@ -381,6 +438,8 @@ class DynamicIsland(Gtk.Window):
         texts.append(sub)
         self.toast.append(texts)
         self._fill_compact()
+        if self.hidden:
+            self.reveal(True)
         self._set_page("toast")
         self._cancel(("_toast_timer",))
         self._toast_timer = GLib.timeout_add(TOAST_MS, self._end_toast)
@@ -390,6 +449,8 @@ class DynamicIsland(Gtk.Window):
         if self.state == "toast":
             self.state = "compact"
             self._render()
+            if not self._area.contains_pointer():
+                self._schedule_hide()
         return GLib.SOURCE_REMOVE
 
     def _cancel(self, names) -> None:
@@ -453,6 +514,8 @@ class DynamicIsland(Gtk.Window):
 
     def _menu_closed(self) -> None:
         self._menu_open = False
+        if not self._area.contains_pointer():
+            self._schedule_hide()
         self._close_timer = GLib.timeout_add(HOVER_CLOSE_MS, self._hover_close)
 
     # -- input region ------------------------------------------------------------------
@@ -474,15 +537,19 @@ class DynamicIsland(Gtk.Window):
         surface = self.get_surface()
         if surface is None:
             return
-        ok, b = self.pill.compute_bounds(self)
-        if not ok or b.size.width < 1:
-            # Not laid out yet: use the size the pill is about to take.
-            w, h = IDLE_W, COMPACT_H
-            rect = cairo.RectangleInt((WIDTH - w) // 2, 0, w, h)
-        else:
-            rect = cairo.RectangleInt(int(b.origin.x), int(b.origin.y),
-                                      int(b.size.width + 0.5), int(b.size.height + 0.5))
-        surface.set_input_region(cairo.Region(rect))
+        region = cairo.Region(cairo.RectangleInt((WIDTH - HOT_W) // 2, 0, HOT_W, HOT_H))
+        if not self.hidden or self.revealer.get_child_revealed():
+            ok, b = self.pill.compute_bounds(self)
+            if not ok or b.size.width < 1:
+                # Not laid out yet: use the size the pill is about to take.
+                w, h = IDLE_W, COMPACT_H + TOP_GAP
+                rect = cairo.RectangleInt((WIDTH - w) // 2, 0, w, h)
+            else:
+                # From the window top, so the gap above the pill is covered too.
+                rect = cairo.RectangleInt(int(b.origin.x), 0, int(b.size.width + 0.5),
+                                          int(b.origin.y + b.size.height + 0.5))
+            region.union(rect)
+        surface.set_input_region(region)
 
 
 def _clear(box: Gtk.Box) -> None:

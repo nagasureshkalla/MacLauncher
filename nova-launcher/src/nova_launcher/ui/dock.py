@@ -2,7 +2,11 @@
 
 Design notes
 * The window has a fixed size large enough for full magnification, so moving
-  the pointer never resizes an X window; only icon pixel sizes change.
+  the pointer never resizes an X window; only icon sizes change.
+* Each icon is looked up and rasterised once, at its largest (magnified) size;
+  magnification only scales that texture (DockIcon). Changing a Gtk.Image's
+  pixel size instead re-renders the SVG at every new size: ~27 ms per frame
+  for 14 WhiteSur icons, more than a 60 fps frame allows.
 * Magnification targets are computed from the *unmagnified* layout, so the
   growing bar cannot feed back into the pointer mapping (no jitter).
 * The animation runs on the frame clock only while something is moving and
@@ -23,7 +27,8 @@ import cairo
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
+gi.require_version("Graphene", "1.0")
+from gi.repository import Gdk, Gio, GLib, GObject, Graphene, Gtk  # noqa: E402
 
 from ..core.desktop_entry import AppRecord  # noqa: E402
 from ..core.running_apps import next_window  # noqa: E402
@@ -62,6 +67,60 @@ def magnify(positions: list[float], pointer: float | None, unit: float, mag: flo
     return out
 
 
+class DockIcon(Gtk.Widget):
+    """An app icon drawn at any size from one texture rendered at the largest size."""
+
+    def __init__(self, gicon: Gio.Icon, size: int, max_size: int):
+        super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, overflow=Gtk.Overflow.VISIBLE)
+        self.gicon = gicon
+        self.size = size
+        self.max_size = max(size, max_size)
+        self._paintable: Gdk.Paintable | None = None
+        self.connect("notify::scale-factor", lambda *_: self._drop())
+
+    def _drop(self) -> None:
+        self._paintable = None
+        self.queue_draw()
+
+    def _icon(self) -> Gdk.Paintable | None:
+        if self._paintable is None:
+            display = self.get_display()
+            if display is None:
+                return None
+            theme = Gtk.IconTheme.get_for_display(display)
+            self._paintable = theme.lookup_by_gicon(self.gicon, self.max_size, self.get_scale_factor(),
+                                                    Gtk.TextDirection.NONE, 0)
+        return self._paintable
+
+    def set_from_gicon(self, gicon: Gio.Icon) -> None:
+        """Swap the icon (e.g. empty/full trash); same API as Gtk.Image."""
+        if not gicon.equal(self.gicon):
+            self.gicon = gicon
+            self._drop()
+
+    def set_size(self, size: int) -> None:
+        if size > self.max_size:  # magnification was raised: re-render once at the new largest size
+            self.max_size = size
+            self._paintable = None
+        if size != self.size:
+            self.size = size
+            self.queue_resize()
+
+    def do_measure(self, orientation, for_size):
+        return self.size, self.size, -1, -1
+
+    def do_snapshot(self, snap: Gtk.Snapshot) -> None:
+        icon = self._icon()
+        if icon is None:
+            return
+        w, h = self.get_width(), self.get_height()
+        side = min(w, h)
+        snap.save()
+        snap.translate(Graphene.Point().init((w - side) / 2, (h - side) / 2))
+        icon.snapshot(snap, side, side)
+        snap.restore()
+
+
 class DockItem(Gtk.Box):
     def __init__(self, dock: "DockWindow", slot: Slot, size: int, vertical: bool):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL if vertical else Gtk.Orientation.VERTICAL,
@@ -76,9 +135,8 @@ class DockItem(Gtk.Box):
             icon = "user-trash"
         else:
             icon = None
-        self.image = Gtk.Image.new_from_gicon(
-            record_gicon(slot.record) if icon is None and slot.record else gicon_for(icon or ""))
-        self.image.set_pixel_size(size)
+        self.image = DockIcon(record_gicon(slot.record) if icon is None and slot.record else gicon_for(icon or ""),
+                              size, int(math.ceil(size * max(dock.mag, 1.0))))
         self.dot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.dot.add_css_class("nova-running-dot")
         pos = dock.position
@@ -122,7 +180,7 @@ class DockItem(Gtk.Box):
         if abs(scale - self.scale) < 0.004:
             return
         self.scale = scale
-        self.image.set_pixel_size(int(round(base * scale)))
+        self.image.set_size(int(round(base * scale)))
 
     def set_running(self, running: bool) -> None:
         (self.dot.add_css_class if running else self.dot.remove_css_class)("running")
@@ -221,6 +279,12 @@ class DockWindow(Gtk.Window):
                 self.app.update_dock_visibility()
                 return
             self.rebuild()
+            if key == "dock_autohide":
+                if self.app.settings[key]:
+                    self._schedule_hide()
+                else:
+                    self._cancel_hide()
+                    self.reveal(True)
 
     # -- X11 setup -----------------------------------------------------------------
     def _on_realize(self, *_):
@@ -383,6 +447,7 @@ class DockWindow(Gtk.Window):
         self.pointer = None
         self._kick()
         self.tooltip.set_opacity(0)
+        self._tooltip_item = None
         self._update_input_region()
         if self.app.settings["dock_autohide"]:
             self._schedule_hide()
@@ -422,7 +487,11 @@ class DockWindow(Gtk.Window):
         item = self._hovered_item()
         if item is None:
             self.tooltip.set_opacity(0)
+            self._tooltip_item = None
             return
+        if item is getattr(self, "_tooltip_item", None):
+            return  # same icon as on the previous motion event: nothing moves
+        self._tooltip_item = item
         self.tooltip.set_text(item.title)
         _, nat = self.tooltip.get_preferred_size()
         center = self._slot_centers()[self.items.index(item)]

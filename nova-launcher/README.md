@@ -43,7 +43,8 @@ they never capture other windows.
   running / recent sections with separators, click to focus or cycle windows,
   middle-click for a new instance, right-click menu (desktop actions, Keep in
   Dock, Quit), drag-to-pin and reorder, launch bounce, trash, bottom/left/right,
-  auto-hide, multi-monitor.
+  auto-hide (on by default: touch the bottom edge to reveal; windows get the
+  full height), multi-monitor.
 * **Dynamic Island** (X11): a black pill at the top centre of the main
   monitor, just under the GNOME top bar. Compact, it shows the focused app
   and the icons of the next few running apps; when a new app starts it
@@ -52,8 +53,10 @@ they never capture other windows.
   recently used app first, a green dot on the focused window) — click a tile
   to switch to that window, right-click to Close Window, open a New Window or
   Quit the app. **Scroll** over the compact pill to flip between apps. By
-  default maximized windows stop below it (Settings → General → Dynamic
-  Island → *Keep windows below it*); it can be turned off there too. Uses the
+  default it **auto-hides** so windows get the full screen: touch the area
+  just under the GNOME top bar (centre) to slide it back down. Turn
+  auto-hide off in Settings → General → Dynamic Island to keep it visible
+  (then maximized windows stop below it, unless *Keep windows below it* is off). Uses the
   same event-driven window list as the dock: no polling, zero idle CPU.
 * **Commands widget** (X11): a small panel in a screen corner listing every
   Nova command — **All Applications** first, then Quick Search, Files,

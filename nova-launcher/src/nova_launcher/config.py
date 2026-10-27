@@ -68,7 +68,7 @@ SCHEMA: dict[str, Option] = {
     "dock_icon_size": Option(48, int, min=24, max=96),
     "dock_magnification": Option(1.6, float, min=1.0, max=2.5),
     "dock_spacing": Option(6, int, min=0, max=24),
-    "dock_autohide": Option(False, bool),
+    "dock_autohide": Option(True, bool, description="Hide until the pointer touches the screen edge"),
     "dock_reserve_space": Option(True, bool, description="Maximized windows stop above the dock"),
     "dock_show_running": Option(True, bool),
     "dock_show_recent": Option(True, bool),
@@ -77,7 +77,8 @@ SCHEMA: dict[str, Option] = {
     "pinned_apps": Option(list(DEFAULT_PINNED), list),
     # Dynamic Island
     "island_enabled": Option(True, bool, description="Running apps in a pill at the top of the screen"),
-    "island_reserve_space": Option(True, bool, description="Maximized windows stop below the island"),
+    "island_autohide": Option(True, bool, description="Slide away; touch the area under the top bar to show it"),
+    "island_reserve_space": Option(True, bool, description="Maximized windows stop below the island (when not hiding)"),
     "island_monitor": Option("primary", str),
     # Commands widget
     "widget_enabled": Option(True, bool, description="Show the commands widget on the desktop"),

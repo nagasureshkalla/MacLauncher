@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("nova.grid")
 
-RELEASE_AFTER_S = 20
+# Keep the full-screen surface and rendered icons for a while after closing: re-creating them costs a
+# fresh GL surface plus re-rendering every SVG on the page before the first frame (noticeable lag).
+RELEASE_AFTER_S = 600
 
 
 def trim_heap() -> None:

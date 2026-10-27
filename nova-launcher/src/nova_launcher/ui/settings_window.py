@@ -77,8 +77,10 @@ class SettingsWindow(Adw.PreferencesWindow):
                                              "Hover or click it to see them all and switch; scroll over it "
                                              "to flip between apps.")
         self._switch(g, "island_enabled", "Show Dynamic Island")
+        self._switch(g, "island_autohide", "Automatically hide",
+                     "Windows get the full screen; touch the area just under the top bar to show it")
         self._switch(g, "island_reserve_space", "Keep windows below it",
-                     "Maximized windows stop under the island instead of behind it")
+                     "Only when not hiding: maximized windows stop under the island")
         page.add(g)
 
         g = Adw.PreferencesGroup(title="Commands widget",
