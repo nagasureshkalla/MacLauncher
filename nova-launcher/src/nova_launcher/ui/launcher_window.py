@@ -18,7 +18,8 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..core.file_manager import Place  # noqa: E402
 from ..core.search_engine import normalise  # noqa: E402
-from .widgets import gicon_for  # noqa: E402
+from .glass import GlassBox  # noqa: E402
+from .widgets import gicon_for, record_gicon  # noqa: E402
 
 if TYPE_CHECKING:
     from ..application import NovaApplication
@@ -125,7 +126,7 @@ class ResultRow(Gtk.ListBoxRow):
 
     def bind(self, item: ResultItem, position: int) -> None:
         self.item = item
-        self.image.set_from_gicon(gicon_for(item.icon))
+        self.image.set_from_gicon(record_gicon(item.payload) if item.kind == "app" else gicon_for(item.icon))
         self.title.set_text(item.title)
         self.subtitle.set_text(item.subtitle or "")
         self.subtitle.set_visible(bool(item.subtitle))
@@ -151,8 +152,7 @@ class QuickLauncherWindow(Gtk.Window):
         outer.set_margin_bottom(28)
         outer.set_margin_start(24)
         outer.set_margin_end(24)
-        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        panel.add_css_class("nova-glass")
+        panel = GlassBox(app, radius=18, strength="strong", orientation=Gtk.Orientation.VERTICAL, spacing=4)
         panel.add_css_class("nova-quick")
         panel.set_size_request(self.WIDTH - 48, -1)
 

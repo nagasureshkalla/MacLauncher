@@ -20,6 +20,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 from ..system import x11  # noqa: E402
+from .glass import GlassBox  # noqa: E402
 from .widgets import Toast, gicon_for  # noqa: E402
 
 if TYPE_CHECKING:
@@ -106,8 +107,7 @@ class CommandsWidget(Gtk.Window):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         for side in ("top", "bottom", "start", "end"):
             getattr(outer, f"set_margin_{side}")(10)  # room for the shadow
-        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.panel.add_css_class("nova-glass")
+        self.panel = GlassBox(app, radius=20, orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.panel.add_css_class("nova-widget")
         self.panel.set_size_request(WIDTH, -1)
         outer.append(self.panel)
@@ -281,7 +281,7 @@ class CommandsWidget(Gtk.Window):
         pos = self.app.settings["widget_position"]
         x = area.x + MARGIN if pos.endswith("left") else area.x + area.width - w - MARGIN
         y = area.y + MARGIN if pos.startswith("top") else area.y + area.height - h - MARGIN
-        x11.move(self._xid, x, y)
+        self.app.move_window(self, x, y, mon)
         return GLib.SOURCE_REMOVE
 
     def show_widget(self) -> None:

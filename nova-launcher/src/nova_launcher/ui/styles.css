@@ -1,166 +1,171 @@
-/* Nova Launcher — original styling.  Light by default; .nova-dark on a
-   toplevel switches its palette.  Translucency needs a compositor (Mutter). */
+/* Nova Launcher — macOS-inspired, original styling.
+ *
+ * Design tokens (kept consistent everywhere):
+ *   type      Ubuntu Sans; 13px body, 11px captions, 24px search
+ *   accent    #0a84ff (dark) / #007aff (light) — selection & focus
+ *   radius    22 dock · 20 widget · 18 search · 12 rows · 22 tiles
+ *   depth     two-layer shadows: a tight contact shadow + a soft ambient one
+ * Glass surfaces (.nova-glass-surface) are painted in code (glass.py) from a
+ * blurred copy of the wallpaper; CSS only adds their shadow.
+ * .nova-dark / .nova-light on each toplevel select the palette.
+ */
 
-/* ---------- shared ---------- */
+/* ---------- base ---------- */
+.nova-launcher, .nova-launcher * {
+  font-family: "Ubuntu Sans", "Ubuntu", "Cantarell", sans-serif;
+}
 .nova-transparent,
 window.nova-transparent {
   background: none;
   box-shadow: none;
 }
-
-.nova-glass {
-  background-color: rgba(250, 250, 252, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  border-radius: 22px;
+.nova-glass-surface {
+  background: none;
+  border: none;
 }
-.nova-dark .nova-glass {
-  background-color: rgba(30, 32, 38, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
 .nova-app-name {
   font-weight: 500;
-  font-size: 0.92em;
+  font-size: 13px;
+  letter-spacing: 0.1px;
 }
+.caption { font-size: 11px; }
 
-/* ---------- quick launcher (spotlight-style) ---------- */
+/* ---------- quick search (Spotlight-like) ---------- */
 .nova-quick {
-  padding: 10px;
-  border-radius: 20px;
+  padding: 8px 8px 10px;
+  border-radius: 18px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 24px 60px rgba(0, 0, 0, 0.38);
 }
 .nova-quick-entry {
-  font-size: 1.55em;
-  min-height: 48px;
+  font-size: 24px;
+  font-weight: 300;
+  min-height: 52px;
   background: none;
   border: none;
   box-shadow: none;
   outline: none;
-  padding: 0 6px;
+  padding: 0 10px;
+  color: inherit;
 }
 .nova-quick-entry > text { padding: 0; }
-.nova-quick-entry > image { -gtk-icon-size: 22px; opacity: 0.6; }
+.nova-quick-entry > text > placeholder { opacity: 0.45; }
+.nova-quick-entry > image { -gtk-icon-size: 22px; opacity: 0.55; }
 .nova-quick list { background: none; }
 .nova-quick row {
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 6px 10px;
-  margin: 1px 0;
-  transition: background-color 120ms ease-out;
-}
-.nova-quick row:selected,
-.nova-quick row:hover:selected {
-  background-color: rgba(53, 132, 228, 0.92);
-  color: white;
+  margin: 1px 2px;
+  transition: background-color 90ms ease-out;
 }
 .nova-quick row:hover { background-color: rgba(127, 127, 127, 0.12); }
-.nova-quick row .dim-label { opacity: 0.62; }
-.nova-quick row:selected .dim-label { opacity: 0.85; }
+.nova-quick row:selected,
+.nova-quick row:selected:hover { background-color: #0a84ff; color: white; }
+.nova-light .nova-quick row:selected,
+.nova-light .nova-quick row:selected:hover { background-color: #007aff; }
+.nova-quick row .dim-label { opacity: 0.6; }
+.nova-quick row:selected .dim-label { opacity: 0.9; }
 .nova-quick .nova-section {
-  font-size: 0.78em;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.6px;
   opacity: 0.5;
-  margin: 8px 12px 2px;
+  margin: 10px 14px 4px;
 }
-.nova-quick separator { margin: 4px 6px; opacity: 0.4; }
-.nova-hint {
-  font-size: 0.82em;
-  opacity: 0.55;
-  margin: 2px 10px 2px;
-}
+.nova-quick separator { margin: 2px 10px 4px; opacity: 0.25; }
+.nova-hint { font-size: 12px; opacity: 0.55; margin: 2px 14px; }
 
-/* ---------- launchpad grid ---------- */
+/* ---------- Launchpad ---------- */
 window.nova-grid-window {
-  background-color: rgba(18, 22, 34, 0.80);
-  background-image: radial-gradient(circle at 20% 15%, rgba(110, 140, 255, 0.28), transparent 55%),
-                    radial-gradient(circle at 85% 85%, rgba(255, 120, 170, 0.20), transparent 50%);
+  /* Fallback until the blurred wallpaper is ready. */
+  background-color: #1b1f2a;
+  background-image: radial-gradient(circle at 20% 15%, rgba(110, 140, 255, 0.30), transparent 55%),
+                    radial-gradient(circle at 85% 85%, rgba(255, 120, 170, 0.22), transparent 50%);
   color: white;
 }
-window.nova-grid-window.nova-light {
-  background-color: rgba(236, 240, 248, 0.86);
-  background-image: radial-gradient(circle at 20% 15%, rgba(120, 160, 255, 0.35), transparent 55%),
-                    radial-gradient(circle at 85% 85%, rgba(255, 160, 200, 0.30), transparent 50%);
-  color: #1d1d22;
-}
+window.nova-grid-window.nova-has-backdrop { background-color: black; background-image: none; }
+.nova-grid-dim { background-color: rgba(0, 0, 0, 0.12); }
+.nova-has-backdrop .nova-grid-dim { background-color: rgba(10, 12, 18, 0.30); }
+window.nova-grid-window.nova-light .nova-grid-dim { background-color: rgba(255, 255, 255, 0.10); }
+
 .nova-grid-content {
   opacity: 0;
-  transform: scale(1.06);
-  transition: opacity 180ms ease-out, transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.0);
+  transform: scale(1.08);
+  transition: opacity 200ms ease-out, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.nova-grid-content.shown {
-  opacity: 1;
-  transform: none;
-}
-.nova-reduced-motion .nova-grid-content { transition: opacity 90ms linear; transform: none; }
+.nova-grid-content.shown { opacity: 1; transform: none; }
+.nova-reduced-motion .nova-grid-content { transition: opacity 100ms linear; transform: none; }
 .nova-no-motion .nova-grid-content { transition: none; transform: none; }
 
 .nova-grid-search {
-  min-width: 300px;
-  min-height: 34px;
-  border-radius: 10px;
+  min-width: 260px;
+  min-height: 30px;
+  border-radius: 9px;
+  font-size: 13px;
   background-color: rgba(255, 255, 255, 0.16);
-  color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: white;
 }
-.nova-light .nova-grid-search { background-color: rgba(255, 255, 255, 0.7); border-color: rgba(0, 0, 0, 0.08); }
+.nova-grid-search > text > placeholder { color: rgba(255, 255, 255, 0.65); }
+.nova-grid-search > image { color: rgba(255, 255, 255, 0.75); }
 
 .nova-tile {
   background: none;
   border: none;
   box-shadow: none;
-  border-radius: 18px;
-  padding: 10px 6px 8px;
-  transition: background-color 140ms ease-out, transform 140ms ease-out;
+  border-radius: 22px;
+  padding: 12px 6px 10px;
+  color: white;
+  transition: background-color 120ms ease-out, transform 120ms ease-out;
 }
+.nova-tile image { -gtk-icon-shadow: 0 4px 10px rgba(0, 0, 0, 0.35); }
 .nova-tile:hover { background-color: rgba(255, 255, 255, 0.10); }
-.nova-light .nova-tile:hover { background-color: rgba(0, 0, 0, 0.06); }
-.nova-tile:focus-visible,
-.nova-tile.nova-selected {
-  background-color: rgba(255, 255, 255, 0.20);
-  outline: 2px solid rgba(120, 170, 255, 0.95);
+.nova-tile:active { transform: scale(0.93); }
+.nova-tile.nova-selected,
+.nova-tile:focus-visible {
+  background-color: rgba(255, 255, 255, 0.18);
+  outline: 2px solid rgba(10, 132, 255, 0.95);
   outline-offset: -2px;
 }
-.nova-light .nova-tile.nova-selected { background-color: rgba(53, 132, 228, 0.16); }
-.nova-tile:active { transform: scale(0.94); }
 .nova-tile .nova-app-name {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  font-size: 12.5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
-.nova-light .nova-tile .nova-app-name { text-shadow: none; }
-.nova-tile.nova-drop-into { background-color: rgba(120, 170, 255, 0.30); }
-.nova-tile.nova-drop-before { box-shadow: inset 3px 0 0 rgba(120, 170, 255, 0.95); }
-.nova-tile.nova-drop-after  { box-shadow: inset -3px 0 0 rgba(120, 170, 255, 0.95); }
+.nova-tile.nova-drop-into { background-color: rgba(10, 132, 255, 0.30); }
+.nova-tile.nova-drop-before { box-shadow: inset 3px 0 0 #0a84ff; }
+.nova-tile.nova-drop-after  { box-shadow: inset -3px 0 0 #0a84ff; }
 
 .nova-folder-icon {
-  background-color: rgba(255, 255, 255, 0.20);
-  border-radius: 20px;
-  padding: 8px;
+  background-color: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  padding: 10px;
 }
-.nova-light .nova-folder-icon { background-color: rgba(0, 0, 0, 0.08); }
-
 .nova-folder-panel {
-  padding: 18px 22px 22px;
-  border-radius: 28px;
-  background-color: rgba(60, 64, 78, 0.85);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 20px 26px 26px;
+  border-radius: 30px;
+  background-color: rgba(40, 42, 52, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  color: white;
 }
-.nova-light .nova-folder-panel { background-color: rgba(255, 255, 255, 0.92); }
 .nova-folder-title {
-  font-size: 1.4em;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
   background: none;
   border: none;
   box-shadow: none;
   color: inherit;
 }
-.nova-folder-scrim { background-color: rgba(0, 0, 0, 0.25); }
-
-carousel indicatordots, .nova-dots { color: inherit; }
-.nova-empty { font-size: 1.2em; opacity: 0.7; }
+.nova-folder-scrim { background-color: rgba(0, 0, 0, 0.30); }
+.nova-dots { color: white; }
+.nova-empty { font-size: 15px; opacity: 0.75; color: white; }
 
 /* ---------- dock ---------- */
 .nova-dock-bar {
-  padding: 6px 8px;
-  border-radius: 24px;
+  padding: 5px 9px;
+  border-radius: 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.20), 0 14px 34px rgba(0, 0, 0, 0.30);
 }
 .nova-dock-item {
   background: none;
@@ -168,20 +173,16 @@ carousel indicatordots, .nova-dots { color: inherit; }
   box-shadow: none;
   padding: 0;
   margin: 0;
-  border-radius: 14px;
   min-width: 0;
   min-height: 0;
 }
-.nova-dock-item:hover { background: none; }
-.nova-dock-item image { -gtk-icon-shadow: 0 3px 6px rgba(0, 0, 0, 0.28); }
-.nova-dock-item.launching image {
-  animation: nova-bounce 0.9s cubic-bezier(0.3, 0.0, 0.3, 1.0) 2;
-}
+.nova-dock-item image { -gtk-icon-shadow: 0 3px 6px rgba(0, 0, 0, 0.30); }
+.nova-dock-item.launching image { animation: nova-bounce 0.85s cubic-bezier(0.3, 0, 0.3, 1) 2; }
 .nova-reduced-motion .nova-dock-item.launching image,
 .nova-no-motion .nova-dock-item.launching image { animation: nova-pulse 0.6s ease-in-out 1; }
 @keyframes nova-bounce {
   0%   { transform: translateY(0); }
-  35%  { transform: translateY(-18px); }
+  35%  { transform: translateY(-20px); }
   65%  { transform: translateY(0); }
   100% { transform: translateY(0); }
 }
@@ -194,79 +195,95 @@ carousel indicatordots, .nova-dots { color: inherit; }
 .nova-dock-right .nova-dock-item.launching image { animation-name: nova-bounce-xr; }
 @keyframes nova-bounce-x {
   0%   { transform: translateX(0); }
-  35%  { transform: translateX(18px); }
+  35%  { transform: translateX(20px); }
   65%  { transform: translateX(0); }
   100% { transform: translateX(0); }
 }
 @keyframes nova-bounce-xr {
   0%   { transform: translateX(0); }
-  35%  { transform: translateX(-18px); }
+  35%  { transform: translateX(-20px); }
   65%  { transform: translateX(0); }
   100% { transform: translateX(0); }
 }
 
 .nova-running-dot {
-  min-width: 5px;
-  min-height: 5px;
+  min-width: 4px;
+  min-height: 4px;
   border-radius: 99px;
-  background-color: rgba(30, 30, 30, 0.75);
+  background-color: rgba(30, 30, 30, 0.80);
   opacity: 0;
   transition: opacity 200ms;
 }
-.nova-dark .nova-running-dot { background-color: rgba(255, 255, 255, 0.85); }
+.nova-dark .nova-running-dot {
+  background-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+}
 .nova-running-dot.running { opacity: 1; }
 
 .nova-dock-separator {
   min-width: 1px;
   min-height: 1px;
   background-color: rgba(0, 0, 0, 0.18);
-  margin: 8px 4px;
+  margin: 9px 4px;
 }
-.nova-dark .nova-dock-separator { background-color: rgba(255, 255, 255, 0.22); }
+.nova-dark .nova-dock-separator { background-color: rgba(255, 255, 255, 0.24); }
 
 .nova-dock-tooltip {
-  padding: 4px 12px;
-  border-radius: 9px;
-  background-color: rgba(40, 42, 50, 0.88);
-  color: white;
+  padding: 4px 11px;
+  border-radius: 7px;
+  font-size: 13px;
   font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background-color: rgba(246, 246, 248, 0.94);
+  color: #1d1d1f;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
-.nova-dark .nova-dock-tooltip { background-color: rgba(235, 237, 242, 0.92); color: #1d1d22; }
-.nova-dock-item.nova-drop-before { box-shadow: inset 3px 0 0 #3584e4; }
+.nova-dark .nova-dock-tooltip {
+  background-color: rgba(40, 40, 46, 0.94);
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.nova-dock-item.nova-drop-before { box-shadow: inset 3px 0 0 #0a84ff; }
+
+/* ---------- commands widget ---------- */
+.nova-widget {
+  padding: 10px 8px 8px;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+.nova-widget-header { padding: 2px 4px 8px 10px; }
+.nova-widget-title { font-weight: 700; font-size: 14px; letter-spacing: 0.2px; }
+.nova-widget-list { background: none; }
+.nova-widget-list row {
+  border-radius: 12px;
+  padding: 7px 10px;
+  margin: 1px 0;
+  transition: background-color 100ms ease-out;
+}
+.nova-widget-list row:hover { background-color: rgba(127, 127, 127, 0.16); }
+.nova-widget-list row.nova-widget-primary {
+  background-color: rgba(10, 132, 255, 0.22);
+  margin-bottom: 6px;
+}
+.nova-widget-list row.nova-widget-primary:hover { background-color: rgba(10, 132, 255, 0.34); }
+.nova-kbd {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background-color: rgba(127, 127, 127, 0.20);
+  border: 1px solid rgba(127, 127, 127, 0.28);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.nova-widget-expander { margin: 6px 10px 2px; }
+.nova-widget-expander > title { opacity: 0.65; font-weight: 600; font-size: 12px; }
+.nova-widget-cli { font-size: 12px; }
 
 /* ---------- toast ---------- */
 .nova-toast {
   padding: 8px 14px;
   border-radius: 12px;
-  background-color: rgba(40, 42, 50, 0.92);
+  background-color: rgba(30, 30, 34, 0.94);
   color: white;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
-
-/* ---------- commands widget ---------- */
-.nova-widget { padding: 10px 8px 8px; border-radius: 20px; }
-.nova-widget-header { padding: 0 4px 6px 8px; }
-.nova-widget-title { font-weight: 700; font-size: 1.05em; }
-.nova-widget-list { background: none; }
-.nova-widget-list row {
-  border-radius: 12px;
-  padding: 7px 10px;
-  transition: background-color 120ms ease-out;
-}
-.nova-widget-list row:hover { background-color: rgba(127, 127, 127, 0.14); }
-.nova-widget-list row.nova-widget-primary {
-  background-color: rgba(53, 132, 228, 0.16);
-  margin-bottom: 4px;
-}
-.nova-widget-list row.nova-widget-primary:hover { background-color: rgba(53, 132, 228, 0.26); }
-.nova-kbd {
-  font-size: 0.82em;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background-color: rgba(127, 127, 127, 0.18);
-  border: 1px solid rgba(127, 127, 127, 0.25);
-}
-.nova-widget-expander { margin: 6px 10px 2px; }
-.nova-widget-expander > title { opacity: 0.7; font-weight: 600; font-size: 0.9em; }
-.nova-widget-cli { font-size: 0.88em; }

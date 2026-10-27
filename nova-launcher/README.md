@@ -11,6 +11,16 @@ written in Python 3.12 with **GTK 4 + libadwaita** (no Electron, no web view).
 |---|---|---|
 | ![dock](docs/screenshots/dock.png) | ![settings](docs/screenshots/settings.png) | ![widget](docs/screenshots/commands-widget.png) |
 
+**Look:** icons from the [WhiteSur icon theme](https://github.com/vinceliuice/WhiteSur-icon-theme)
+(GPL-3.0, installed separately per-user, used only inside Nova; the system
+icon theme is not changed), Ubuntu Sans type, Apple-blue accents and
+**frosted glass made from your own wallpaper**. GNOME does not let apps blur
+what is behind their windows, but the commands widget always sits on the
+desktop and the dock lives in screen space windows don't enter, so Nova blurs
+the wallpaper once (cached, recomputed only when it changes) and paints each
+panel with the slice that is behind it. The Launchpad uses the whole blurred
+wallpaper, like macOS. Both can be turned off in Settings → General.
+
 Screenshots are rendered by GTK from the running app (`--screenshot DIR`), so
 they never capture other windows.
 
@@ -234,6 +244,32 @@ report. In short:
 Recommended fix (run `nova-launcher --repair`; nothing is changed without "y"):
 stop indexing `~/Desktop` recursively and reset Tracker's cache-only index.
 
+## Files (Nautilus) was slow: the Templates folder
+
+Measured on this machine: going Desktop ↔ Downloads in Files took up to 15 s,
+and every return to Desktop got slower the longer Files stayed open.
+
+**Cause (verified with `strace` and an A/B test):** Unreal Engine is extracted
+directly into `$HOME`, so `~/Templates` is Unreal's template folder — 5,880
+files in 4,571 folders. Nautilus turns *everything* in the Templates folder
+into its right-click "New Document" menu and rebuilds that menu on the main
+thread on every folder change (the "duplicate child name in GtkStack:
+Content/Media/…" warnings were those Unreal folder names becoming menu pages).
+
+**Fix:** GNOME's Templates folder now points at a new, empty
+`~/Documents/Templates` (one line in `~/.config/user-dirs.dirs`; the original
+is saved as `user-dirs.dirs.nova-backup`). No Unreal file was moved.
+
+| 12 round trips, D-Bus driven | Before | After |
+|---|---|---|
+| Desktop → Downloads | 157–552 ms | **7–24 ms** |
+| Downloads → Desktop | 465 → 1,906 ms (growing) | **7–9 ms (flat)** |
+| Nautilus UI thread blocked | up to 1,211 ms | **8 ms** |
+
+Undo: `cp ~/.config/user-dirs.dirs.nova-backup ~/.config/user-dirs.dirs && nautilus -q`.
+`nova-launcher --diagnose` now checks the Templates folder and `--repair`
+offers this fix.
+
 ## Troubleshooting (Ubuntu 24.04 / GNOME / Wayland)
 
 | Symptom | Fix |
@@ -254,7 +290,7 @@ stop indexing `~/Desktop` recursively and reset Tracker's cache-only index.
 ```bash
 python3 -m venv --system-site-packages .venv   # uses Ubuntu's PyGObject
 .venv/bin/pip install pytest
-.venv/bin/python -m pytest -q                  # 81 tests (6 need a graphical session)
+.venv/bin/python -m pytest -q                  # 85 tests (6 need a graphical session)
 PYTHONPATH=src python3 -m nova_launcher.main --quick --debug
 python3 scripts/benchmark.py
 PYTHONPATH=src python3 -m nova_launcher.main --screenshot docs/screenshots

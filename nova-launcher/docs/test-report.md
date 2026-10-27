@@ -4,7 +4,7 @@ Date: 2026-10-26 · Ubuntu 24.04.4 LTS, GNOME Shell 46.0, **X11** session,
 NVIDIA RTX 3090 (driver 580.178.04), Python 3.12.3, GTK 4.14.5, libadwaita 1.5.0.
 Only results that were actually executed are listed.
 
-## Automated tests — `pytest`: 81 passed, 0 failed (3 consecutive runs)
+## Automated tests — `pytest`: 85 passed, 0 failed (repeated runs)
 
 | Area (requirement) | Tests | File |
 |---|---|---|
@@ -60,6 +60,9 @@ reporting; `x11` helpers could dereference libX11 before loading it.
 | Real key presses (XTest): Super+Space -> quick search, Super+A -> Launchpad, Esc returns focus | ✅ |
 | Windows key (XTest): tap -> All Applications, tap again closes, Windows+Space -> Quick Search (no false tap), Windows+A -> grid, Windows+S -> GNOME overview on/off, long hold -> nothing | ✅ |
 | Dock: All Applications is the first icon; real click opens the grid | ✅ |
+| Files slowness: root cause traced with strace (Templates folder); keyboard-free A/B over 12 round trips: Downloads->Desktop 0.5-1.9 s (growing) -> 7-9 ms (flat) | ✅ |
+| Glass alignment: rendered dock pixels match wallpaper slice + tint within ~4/255 per channel | ✅ |
+| Launchpad pages are full screen width (page 2 no longer peeks in) | ✅ |
 | Commands widget: corner placement, BELOW+STICKY, no focus steal, real click on All Applications opens Launchpad | ✅ |
 | Screenshot tour (7 views rendered from the live app) | ✅ docs/screenshots/ |
 

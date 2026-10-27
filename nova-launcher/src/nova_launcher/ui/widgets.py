@@ -55,8 +55,40 @@ def gicon_for(icon: str) -> Gio.Icon:
     return gicon
 
 
+def themed_candidates(record: AppRecord) -> list[str]:
+    """Icon-theme names to try for an app (pure; tested).
+
+    Snap/Flatpak entries often point at a bundled PNG; themes such as WhiteSur
+    ship a nicer icon under the app's executable or desktop-ID name.
+    """
+    stem = record.id.removesuffix(".desktop")
+    names = []
+    if record.icon and not record.icon.startswith("/"):
+        names.append(record.icon)
+    if "_" in stem:  # snap: "firefox_firefox"
+        names.append(stem.split("_", 1)[1])
+    names += [record.executable, stem, stem.split(".")[-1].lower(), record.startup_wm_class.lower()]
+    return [n for n in dict.fromkeys(names) if n]
+
+
+@functools.lru_cache(maxsize=1024)
+def record_gicon(record: AppRecord) -> Gio.Icon:
+    """Best icon for an app: prefer the icon theme over bundled image files."""
+    display = Gdk.Display.get_default()
+    if record.icon.startswith("/") and display is not None:
+        theme = Gtk.IconTheme.get_for_display(display)
+        for name in themed_candidates(record):
+            if theme.has_icon(name):
+                return Gio.ThemedIcon.new(name)
+    return gicon_for(record.icon)
+
+
 def app_image(record: AppRecord | None, size: int, icon: str | None = None) -> Gtk.Image:
-    img = Gtk.Image.new_from_gicon(gicon_for(icon if icon is not None else (record.icon if record else "")))
+    if icon is None and record is not None:
+        gicon = record_gicon(record)
+    else:
+        gicon = gicon_for(icon if icon is not None else "")
+    img = Gtk.Image.new_from_gicon(gicon)
     img.set_pixel_size(size)
     return img
 

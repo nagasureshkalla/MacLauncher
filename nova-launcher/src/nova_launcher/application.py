@@ -50,6 +50,8 @@ class NovaApplication(Adw.Application):
         self.files: FileManager | None = None
         self._bench_file = os.environ.get("NOVA_BENCH_FILE")
         self._dock_ok: bool | None = None
+        self._origins: dict[int, tuple] = {}
+        self.wallpaper = None
         self._held = False
 
         for name, short, desc in (
@@ -89,6 +91,11 @@ class NovaApplication(Adw.Application):
         self.settings.connect(self._on_setting)
 
         self._install_actions()
+        self._system_icon_theme = Gtk.Settings.get_default().get_property("gtk-icon-theme-name")
+        from .ui.wallpaper import BlurredWallpaper
+
+        self.wallpaper = BlurredWallpaper(self.is_dark)
+        self.wallpaper.connect(self._on_wallpaper_ready)
         self._apply_theme()
         Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self._apply_theme())
 
@@ -204,8 +211,10 @@ class NovaApplication(Adw.Application):
             self.index.usage.enabled = self.settings[key]
         elif key == "file_manager_timeout_ms":
             self.files.timeout_ms = self.settings[key]
-        elif key == "animation_level":
+        elif key in ("animation_level", "icon_theme"):
             self._apply_theme()
+        elif key == "glass_effect":
+            self._on_wallpaper_ready()
         elif key == "widget_enabled":
             self.update_widget_visibility()
         elif key == "windows_key_action":
@@ -216,13 +225,17 @@ class NovaApplication(Adw.Application):
 
     def _apply_theme(self) -> None:
         sm = Adw.StyleManager.get_default()
+        # "system" must follow GNOME's dark-style setting (DEFAULT), not prefer light.
         sm.set_color_scheme({"light": Adw.ColorScheme.FORCE_LIGHT, "dark": Adw.ColorScheme.FORCE_DARK}
-                            .get(self.settings["theme"], Adw.ColorScheme.PREFER_LIGHT))
+                            .get(self.settings["theme"], Adw.ColorScheme.DEFAULT))
+        if hasattr(self, "_system_icon_theme"):
+            self._apply_icon_theme()
         dark = sm.get_dark()
         level = self.settings["animation_level"]
         for w in (self.quick, self.grid, self.dock, self.widget, self.settings_window):
             if w is None:
                 continue
+            w.add_css_class("nova-launcher")
             (w.add_css_class if dark else w.remove_css_class)("nova-dark")
             (w.remove_css_class if dark else w.add_css_class)("nova-light")
             for cls, on in (("nova-reduced-motion", level == "reduced"), ("nova-no-motion", level == "none")):
@@ -320,7 +333,67 @@ class NovaApplication(Adw.Application):
         if not xid or info is None:
             return  # Wayland: the compositor places the window.
         x, y = monitor_support.centered(info.workarea, width, 420, bias)
+        self.move_window(window, x, y, info)
+
+    # -- window positions & glass ------------------------------------------------------
+    def move_window(self, window: Gtk.Window, x: int, y: int, monitor) -> None:
+        """Move a Nova window (X11) and remember where it is, so glass surfaces can
+        find their backdrop without an X round trip on every frame."""
+        xid = self.xid_of(window)
+        if not xid:
+            return
         x11.move(xid, x, y)
+        self._origins[xid] = (int(x), int(y), monitor)
+        window.queue_draw()
+
+    def glass_backdrop(self, widget: Gtk.Widget):
+        """(blurred wallpaper texture, x, y): where ``widget`` sits on that texture."""
+        if self.wallpaper is None or self.settings["glass_effect"] is False:
+            return None
+        root = widget.get_root()
+        origin = self._origins.get(self.xid_of(root)) if root is not None else None
+        if origin is None:
+            return None
+        wx, wy, mon = origin
+        tex = self.wallpaper.texture(mon.geometry.width, mon.geometry.height)
+        if tex is None:
+            return None
+        ok, b = widget.compute_bounds(root)
+        if not ok:
+            return None
+        return tex, wx + b.origin.x - mon.geometry.x, wy + b.origin.y - mon.geometry.y
+
+    def is_dark(self) -> bool:
+        return Adw.StyleManager.get_default().get_dark()
+
+    def _on_wallpaper_ready(self) -> None:
+        for w in (self.quick, self.grid, self.dock, self.widget):
+            if w is not None:
+                w.queue_draw()
+                for child in _iter_widgets(w):
+                    child.queue_draw()
+        if self.grid is not None:
+            self.grid.update_backdrop()
+
+    def _apply_icon_theme(self) -> None:
+        """Nova-only icon theme (WhiteSur by default); the system theme is untouched."""
+        from .ui import widgets
+
+        want = self.settings["icon_theme"]
+        gs = Gtk.Settings.get_default()
+        if want == "WhiteSur" and _icon_theme_installed("WhiteSur"):
+            name = "WhiteSur-dark" if self.is_dark() else "WhiteSur"
+        else:
+            name = self._system_icon_theme
+        if gs.get_property("gtk-icon-theme-name") != name:
+            gs.set_property("gtk-icon-theme-name", name)
+            widgets.gicon_for.cache_clear()
+            widgets.record_gicon.cache_clear()
+            for w in (self.grid, self.dock, self.widget):
+                if w is not None and hasattr(w, "mark_dirty"):
+                    w.mark_dirty()
+                elif w is not None and hasattr(w, "rebuild"):
+                    w.rebuild()
 
     def present_window(self, window: Gtk.Window) -> None:
         """Show ``window`` and make sure it gets focus.
@@ -472,3 +545,17 @@ def _is_x11_display() -> bool:
         return isinstance(display, GdkX11.X11Display)
     except (ImportError, ValueError):
         return False
+
+
+def _iter_widgets(widget: Gtk.Widget):
+    child = widget.get_first_child()
+    while child is not None:
+        yield child
+        yield from _iter_widgets(child)
+        child = child.get_next_sibling()
+
+
+def _icon_theme_installed(name: str) -> bool:
+    dirs = [os.path.join(GLib.get_user_data_dir(), "icons"), os.path.expanduser("~/.icons")]
+    dirs += [os.path.join(d, "icons") for d in GLib.get_system_data_dirs()]
+    return any(os.path.isfile(os.path.join(d, name, "index.theme")) for d in dirs)

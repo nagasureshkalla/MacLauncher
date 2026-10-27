@@ -87,6 +87,9 @@ SCHEMA: dict[str, Option] = {
     "grid_order": Option([], list, description="Custom app/folder order"),
     # Appearance
     "theme": Option("system", str, choices=("system", "light", "dark")),
+    "icon_theme": Option("WhiteSur", str, choices=("WhiteSur", "system"),
+                         description="Icons inside Nova (the system theme is not changed)"),
+    "glass_effect": Option(True, bool, description="Frosted glass made from the blurred wallpaper"),
     "animation_level": Option("full", str, choices=("full", "reduced", "none")),
     # Search
     "search_fuzzy": Option(True, bool),

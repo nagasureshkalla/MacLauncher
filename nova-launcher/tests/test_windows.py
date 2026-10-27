@@ -35,6 +35,9 @@ def app(tmp_path, monkeypatch):
     a.settings.set("dock_enabled", False)
     a.settings.set("grid_columns", 3)
     a.settings.set("grid_rows", 2)
+    # Animations advance only on painted frames, which stop while the screen
+    # is locked; these tests check logic, so make transitions immediate.
+    a.settings.set("animation_level", "none")
     a.register(None)  # runs do_startup
     yield a
     a.quit_app()

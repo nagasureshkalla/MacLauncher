@@ -37,8 +37,28 @@ def render_to_png(widget: Gtk.Widget, path: Path) -> bool:
     return True
 
 
+def _unsync(window) -> None:
+    """Dev only: stop waiting for compositor frame acks so windows still lay
+    out and paint while the session is locked (Mutter acks nothing then)."""
+    try:
+        gi.require_version("GdkX11", "4.0")
+        from gi.repository import GdkX11
+
+        surface = window.get_surface()
+        if isinstance(surface, GdkX11.X11Surface):
+            surface.set_frame_sync_enabled(False)
+    except (ImportError, ValueError):
+        pass
+
+
 def screenshot_tour(app, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+    for w in app.get_windows():
+        w.connect("realize", _unsync)
+        if w.get_realized():
+            _unsync(w)
+    app.connect("window-added", lambda _a, w: (w.connect("realize", _unsync),
+                                               _unsync(w) if w.get_realized() else None))
     steps = []
 
     def step(delay_ms, fn):
@@ -51,13 +71,21 @@ def screenshot_tour(app, out_dir: Path) -> None:
             if clock is None:
                 render_to_png(window, out_dir / name)
                 return
-            h = [0]
+            state = {"h": 0, "done": False}
 
-            def after(c):
-                c.disconnect(h[0])
-                GLib.idle_add(lambda: (render_to_png(window, out_dir / name), GLib.SOURCE_REMOVE)[1])
+            def shoot():
+                if state["done"]:
+                    return GLib.SOURCE_REMOVE
+                state["done"] = True
+                if state["h"]:
+                    clock.disconnect(state["h"])
+                render_to_png(window, out_dir / name)
+                return GLib.SOURCE_REMOVE
 
-            h[0] = clock.connect("after-paint", after)
+            # Prefer the next painted frame (layout applied); fall back to a
+            # timeout because no frames are painted while the screen is locked.
+            state["h"] = clock.connect("after-paint", lambda c: GLib.idle_add(shoot))
+            GLib.timeout_add(400, shoot)
             window.queue_draw()
         return go
 
@@ -76,7 +104,24 @@ def screenshot_tour(app, out_dir: Path) -> None:
     if app.dock is not None:
         step(400, snap(app.dock, "dock.png"))
     # Created lazily after startup, so look it up when the step runs.
-    step(300, lambda: app.widget and snap(app.widget, "commands-widget.png")())
+    # Render the widget even if the user hid it, without touching their setting.
+    temp = {}
+
+    def show_widget():
+        if app.widget is not None and app.widget.get_visible():
+            temp["w"] = app.widget
+            return
+        from .ui.commands_widget import CommandsWidget
+
+        w = CommandsWidget(app)
+        _unsync(w) if w.get_realized() else w.connect("realize", _unsync)
+        app._apply_theme()
+        w.show_widget()
+        temp["w"], temp["own"] = w, True
+
+    step(300, show_widget)
+    step(700, lambda: snap(temp["w"], "commands-widget.png")())
+    step(400, lambda: temp["w"].destroy() if temp.get("own") else None)
     step(350, lambda: app.show_settings())
     step(900, lambda: snap(app.settings_window, "settings.png")())
     step(200, lambda: app.quit_app())

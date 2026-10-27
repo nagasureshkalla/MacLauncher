@@ -28,7 +28,8 @@ from gi.repository import Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 from ..core.desktop_entry import AppRecord  # noqa: E402
 from ..system import x11  # noqa: E402
 from ..system.monitor_support import dock_origin  # noqa: E402
-from .widgets import gicon_for, popup_menu  # noqa: E402
+from .glass import GlassBox  # noqa: E402
+from .widgets import gicon_for, popup_menu, record_gicon  # noqa: E402
 
 if TYPE_CHECKING:
     from ..application import NovaApplication
@@ -73,8 +74,9 @@ class DockItem(Gtk.Box):
         elif slot.kind == "trash":
             icon = "user-trash"
         else:
-            icon = slot.record.icon if slot.record else ""
-        self.image = Gtk.Image.new_from_gicon(gicon_for(icon))
+            icon = None
+        self.image = Gtk.Image.new_from_gicon(
+            record_gicon(slot.record) if icon is None and slot.record else gicon_for(icon or ""))
         self.image.set_pixel_size(size)
         self.dot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.dot.add_css_class("nova-running-dot")
@@ -162,8 +164,7 @@ class DockWindow(Gtk.Window):
         self.set_child(self.overlay)
         self.revealer = Gtk.Revealer(transition_duration=220)
         self.overlay.set_child(self.revealer)
-        self.bar = Gtk.Box()
-        self.bar.add_css_class("nova-glass")
+        self.bar = GlassBox(app, radius=22)
         self.bar.add_css_class("nova-dock-bar")
         self.revealer.set_child(self.bar)
 
@@ -241,7 +242,7 @@ class DockWindow(Gtk.Window):
         # panels such as Ubuntu Dock through the monitor work area.
         area = mon.geometry if (s["dock_autohide"] or reserve) else mon.workarea
         x, y = dock_origin(self.position, area, w, h)
-        x11.move(self._xid, x, y)
+        self.app.move_window(self, x, y, mon)
         thickness = self.base + 2 * BAR_PAD + EDGE_MARGIN + 6 if reserve else 0
         mons = self.app.all_monitor_infos()
         root = (max(m.geometry.x + m.geometry.width for m in mons),

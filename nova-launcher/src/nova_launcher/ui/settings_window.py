@@ -13,7 +13,7 @@ from gi.repository import Adw, Gio, Gtk  # noqa: E402
 from ..config import SCHEMA  # noqa: E402
 from ..system import desktop_integration as integ  # noqa: E402
 from ..system.monitor_support import list_monitors  # noqa: E402
-from .widgets import gicon_for  # noqa: E402
+from .widgets import record_gicon  # noqa: E402
 
 if TYPE_CHECKING:
     from ..application import NovaApplication
@@ -64,6 +64,9 @@ class SettingsWindow(Adw.PreferencesWindow):
         page = Adw.PreferencesPage(title="General", icon_name="preferences-system-symbolic")
         g = Adw.PreferencesGroup(title="Appearance")
         self._combo(g, "theme", "Theme", [("system", "Follow system"), ("light", "Light"), ("dark", "Dark")])
+        self._combo(g, "icon_theme", "Icons", [("WhiteSur", "WhiteSur (macOS style)"), ("system", "System theme")],
+                    "Only inside Nova; your system icon theme is not changed")
+        self._switch(g, "glass_effect", "Frosted glass", "Dock, widget and search use a blurred copy of your wallpaper")
         self._combo(g, "animation_level", "Animations",
                     [("full", "Full"), ("reduced", "Reduced motion"), ("none", "Off")],
                     "Reduced motion replaces bounces and zooms with fades")
@@ -88,7 +91,7 @@ class SettingsWindow(Adw.PreferencesWindow):
 
         g = Adw.PreferencesGroup(title="Windows key",
                                  description="On Linux the Windows key is called “Super”. A quick tap (no other "
-                                             "key) can open Nova; Windows+<key> shortcuts keep working.")
+                                             "key) can open Nova; Windows+&lt;key&gt; shortcuts keep working.")
         self._combo(g, "windows_key_action", "Tap the Windows key to open",
                     [("grid", "All Applications"), ("quick", "Quick Search"),
                      ("overview", "GNOME Activities (default)")],
@@ -184,7 +187,7 @@ class SettingsWindow(Adw.PreferencesWindow):
             row = Adw.ActionRow(title=rec.name if rec else app_id,
                                 subtitle="" if rec else "not installed (hidden from dock)")
             if rec:
-                img = Gtk.Image.new_from_gicon(gicon_for(rec.icon))
+                img = Gtk.Image.new_from_gicon(record_gicon(rec))
                 img.set_pixel_size(32)
                 row.add_prefix(img)
             rm = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"])

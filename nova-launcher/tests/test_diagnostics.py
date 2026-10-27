@@ -87,3 +87,28 @@ def test_autostart_toggle(tmp_path):
     assert "nova-launcher --background" in text and str(tmp_path) in str(integ.autostart_path())
     integ.set_autostart(False)
     assert not integ.autostart_enabled()
+
+
+def test_large_templates_folder_is_flagged(monkeypatch, tmp_path):
+    t = tmp_path / "Templates"
+    for i in range(40):
+        (t / f"TP_{i}" / "Content").mkdir(parents=True)
+        for j in range(10):
+            (t / f"TP_{i}" / "Content" / f"f{j}.uasset").write_text("x")
+    monkeypatch.setattr(dg, "_user_dir", lambda name: str(t))
+    d = dg.Diagnostics()
+    repairs = d.check_templates()
+    assert d.findings[-1].status == dg.PROBLEM
+    assert repairs[0].id == "templates-dir"
+    # The repair never moves or deletes the user's files.
+    flat = [" ".join(c) for c in repairs[0].commands]
+    assert not any(c.startswith(("rm ", "mv ")) for c in flat)
+
+
+def test_small_templates_folder_is_ok(monkeypatch, tmp_path):
+    t = tmp_path / "Templates"
+    t.mkdir()
+    (t / "Empty Document").write_text("")
+    monkeypatch.setattr(dg, "_user_dir", lambda name: str(t))
+    d = dg.Diagnostics()
+    assert d.check_templates() == [] and d.findings[-1].status == dg.OK

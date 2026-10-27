@@ -133,3 +133,35 @@ def test_dock_starts_with_all_applications(tmp_path):
     assert kinds[0] == ("launchpad", None)
     assert kinds[1] == ("pinned", "Files")
     assert kinds[-1] == ("trash", None)
+
+
+def test_themed_icon_candidates_for_snap_and_regular_apps():
+    from nova_launcher.ui.widgets import themed_candidates
+
+    snap = AppRecord(id="firefox_firefox.desktop", path="", name="Firefox", executable="firefox",
+                     icon="/snap/firefox/current/default256.png")
+    assert themed_candidates(snap)[:2] == ["firefox", "firefox_firefox"]
+    regular = AppRecord(id="org.gnome.Nautilus.desktop", path="", name="Files", executable="nautilus",
+                        icon="org.gnome.Nautilus")
+    c = themed_candidates(regular)
+    assert c[0] == "org.gnome.Nautilus" and "nautilus" in c
+
+
+def test_blur_render_cover_crops_to_exact_size(tmp_path):
+    from PIL import Image
+
+    from nova_launcher.ui.wallpaper import render_blur
+
+    src = tmp_path / "wall.png"
+    im = Image.new("RGB", (400, 100), (255, 0, 0))
+    for x in range(200, 400):
+        for y in range(100):
+            im.putpixel((x, y), (0, 0, 255))  # left half red, right half blue
+    im.save(src)
+    out = tmp_path / "blur.png"
+    render_blur(str(src), 160, 90, str(out))
+    res = Image.open(out)
+    assert res.size == (160, 90)
+    # Zoom/cover crops the centre: both colours present, edges dominated by each.
+    assert res.getpixel((5, 45))[0] > res.getpixel((5, 45))[2]
+    assert res.getpixel((154, 45))[2] > res.getpixel((154, 45))[0]

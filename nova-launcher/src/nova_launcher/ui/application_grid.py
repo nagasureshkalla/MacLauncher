@@ -50,11 +50,18 @@ class LaunchpadWindow(Gtk.Window):
         overlay = Gtk.Overlay()
         self.set_child(overlay)
 
+        # Backdrop: blurred wallpaper + a soft dim layer (macOS Launchpad look).
+        self.backdrop = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        overlay.set_child(self.backdrop)
+        dim = Gtk.Box(can_target=False)
+        dim.add_css_class("nova-grid-dim")
+        overlay.add_overlay(dim)
+
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.content.add_css_class("nova-grid-content")
-        self.content.set_margin_top(36)
+        self.content.set_margin_top(48)
         self.content.set_margin_bottom(28)
-        overlay.set_child(self.content)
+        overlay.add_overlay(self.content)
 
         self.search = Gtk.SearchEntry(placeholder_text="Search", halign=Gtk.Align.CENTER)
         self.search.add_css_class("nova-grid-search")
@@ -125,6 +132,14 @@ class LaunchpadWindow(Gtk.Window):
         app.index.connect(self.mark_dirty)
         app.settings.connect(self._on_setting)
 
+    def update_backdrop(self) -> None:
+        mon = self.app.target_monitor_info()
+        tex = None
+        if mon is not None and self.app.wallpaper is not None and self.app.settings["glass_effect"]:
+            tex = self.app.wallpaper.texture(mon.geometry.width, mon.geometry.height)
+        self.backdrop.set_paintable(tex)
+        (self.add_css_class if tex else self.remove_css_class)("nova-has-backdrop")
+
     # -- data ------------------------------------------------------------------
     def mark_dirty(self) -> None:
         self._dirty = True
@@ -162,7 +177,13 @@ class LaunchpadWindow(Gtk.Window):
                 if (old := tile.get_parent()) is not None:
                     old.remove(tile)
                 grid.attach(tile, i % self.cols, i // self.cols, 1, 1)
-            self.carousel.append(grid)
+            # Adw.Carousel lays pages out at each page's own width, so a centred
+            # grid alone would let the next page peek in.  Each page fills the
+            # screen and centres its grid.
+            page = Gtk.Box(hexpand=True, halign=Gtk.Align.FILL)
+            page.append(grid)
+            grid.set_hexpand(True)
+            self.carousel.append(page)
         self._dirty = False
         self.selected = -1
         self._on_search()
@@ -467,6 +488,7 @@ class LaunchpadWindow(Gtk.Window):
             self._closing = 0
         if self._dirty or self.model is None:
             self.rebuild()
+        self.update_backdrop()
         self.search.set_text("")
         self.selected = -1
         self._update_selection()
