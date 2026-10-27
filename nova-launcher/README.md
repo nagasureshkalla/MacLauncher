@@ -23,7 +23,8 @@ they never capture other windows.
   navigation, Page Up/Down, type-to-search, Esc closes, click on background
   closes. Drag an icon onto the **middle** of another to make a folder, onto its
   **left/right edge** to reorder. Folders can be renamed; right-click to remove.
-* **Floating dock** (X11 sessions): glass bar, smooth magnification,
+* **Floating dock** (X11 sessions): starts with an **All Applications** button
+  (right-click for Quick Search / Settings), glass bar, smooth magnification,
   animated name labels, running-app dots (event-driven, no polling), pinned /
   running / recent sections with separators, click to focus or cycle windows,
   middle-click for a new instance, right-click menu (desktop actions, Keep in
@@ -98,15 +99,23 @@ nova-launcher --restore-default   # undo, exactly
 `~/.local/state/nova-launcher/gnome-defaults-backup.json` (kept from the first
 run, so repeating it never loses the originals), then:
 
+On Linux the **Windows key is called "Super"** — they are the same key.
+
 | Change | Before | After |
 |---|---|---|
-| **Super+A** | GNOME app grid | Nova Launchpad |
-| **Super+Space** | switch keyboard layout (does nothing with one layout) | Nova quick search |
+| **Tap Windows** (alone) | GNOME Activities overview | Nova **All Applications** |
+| **Windows+A** | GNOME app grid | Nova **All Applications** |
+| **Windows+Space** | switch keyboard layout (does nothing with one layout) | Nova **Quick Search** |
+| **Windows+S** | (unbound) | GNOME Activities overview (moved here) |
 | Dock | Ubuntu Dock | Nova dock, reserving screen space like Ubuntu Dock |
 | Login | — | Nova starts in the background |
 
-Super alone still opens the GNOME Activities overview, and nothing else in
-GNOME is modified. `--restore-default` puts back the saved keybindings,
+A *tap* means press-and-release with nothing else in between: Windows+<key>,
+Windows+click/drag and holding the key never count. Nova detects taps by
+listening to raw XInput2 events on its own X connection, without grabbing the
+key, so every other Windows+<key> shortcut keeps working. Choose what a tap
+does (All Applications / Quick Search / GNOME Activities) in Settings → General.
+Nothing else in GNOME is modified. `--restore-default` puts back the saved keybindings,
 re-enables Ubuntu Dock, restores the autostart state and Nova's previous
 settings, then deletes the backup.
 
@@ -245,7 +254,7 @@ stop indexing `~/Desktop` recursively and reset Tracker's cache-only index.
 ```bash
 python3 -m venv --system-site-packages .venv   # uses Ubuntu's PyGObject
 .venv/bin/pip install pytest
-.venv/bin/python -m pytest -q                  # 77 tests (6 need a graphical session)
+.venv/bin/python -m pytest -q                  # 81 tests (6 need a graphical session)
 PYTHONPATH=src python3 -m nova_launcher.main --quick --debug
 python3 scripts/benchmark.py
 PYTHONPATH=src python3 -m nova_launcher.main --screenshot docs/screenshots

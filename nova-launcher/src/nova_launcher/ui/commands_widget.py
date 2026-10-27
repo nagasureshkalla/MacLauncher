@@ -41,23 +41,26 @@ class Command:
 
 
 def accel_label(accel: str) -> str:
-    """'<Super>space' -> 'Super+Space' (falls back to the raw string)."""
+    """'<Super>space' -> 'Windows+Space' (Super *is* the Windows key)."""
+    label = accel
     try:
         ok, key, mods = Gtk.accelerator_parse(accel)
         if ok and key:
-            return Gtk.accelerator_get_label(key, mods)
+            label = Gtk.accelerator_get_label(key, mods)
     except Exception:
         pass
-    return accel
+    return label.replace("Super", "Windows").replace("<Windows>", "Windows+")
 
 
 def widget_commands(settings, dock_supported: bool = True) -> list[Command]:
     """Pure: the ordered command list (All Applications first; unit-tested)."""
     cmds = [
         Command("grid", "All Applications", "Launchpad grid of every installed app",
-                "view-app-grid-symbolic", accel_label(settings["shortcut_grid"])),
+                "view-app-grid-symbolic",
+                "Windows" if settings["windows_key_action"] == "grid" else accel_label(settings["shortcut_grid"])),
         Command("quick", "Quick Search", "Type to find apps, folders and settings",
-                "system-search-symbolic", accel_label(settings["shortcut_quick"])),
+                "system-search-symbolic",
+                "Windows" if settings["windows_key_action"] == "quick" else accel_label(settings["shortcut_quick"])),
         Command("files", "Files — Home", "Open your home folder", "user-home"),
         Command("downloads", "Downloads", "Open the Downloads folder", "folder-download"),
     ]
@@ -208,7 +211,8 @@ class CommandsWidget(Gtk.Window):
         self.collapse_btn.set_tooltip_text("Expand" if collapsed else "Collapse")
 
     def _on_setting(self, key: str) -> None:
-        if key in ("shortcut_quick", "shortcut_grid", "dock_enabled", "dock_position", "widget_collapsed"):
+        if key in ("shortcut_quick", "shortcut_grid", "dock_enabled", "dock_position", "widget_collapsed",
+                   "windows_key_action"):
             self.rebuild()
             GLib.timeout_add(220, self._place)  # after the collapse animation
         elif key in ("widget_position", "widget_monitor"):

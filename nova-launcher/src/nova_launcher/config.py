@@ -98,6 +98,8 @@ SCHEMA: dict[str, Option] = {
     # Startup / integration
     "start_hidden": Option(True, bool),
     "shortcut_quick": Option("<Super>slash", str),
+    "windows_key_action": Option("overview", str, choices=("grid", "quick", "overview"),
+                                 description="What a tap of the Windows key does"),
     "shortcut_grid": Option("<Super><Shift>a", str),
     # Diagnostics
     "debug_logging": Option(False, bool),

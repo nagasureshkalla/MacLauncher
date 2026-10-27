@@ -167,6 +167,50 @@ DEFAULT_QUICK = "<Super>space"
 DEFAULT_GRID = "<Super>a"
 
 
+MUTTER = "org.gnome.mutter"
+OVERVIEW_ACCEL = "<Super>s"
+
+
+def _ensure_backup_keys(extra: dict) -> None:
+    """Add newly managed keys to an existing backup without touching old ones."""
+    import json
+
+    bp = backup_path()
+    try:
+        data = json.loads(bp.read_text())
+    except (OSError, ValueError):
+        return
+    changed = False
+    for k, v in extra.items():
+        if k not in data:
+            data[k] = v
+            changed = True
+    if changed:
+        paths.atomic_write(bp, json.dumps(data, indent=2))
+
+
+def apply_windows_key(action: str) -> str:
+    """Make a Windows-key tap open Nova (grid/quick) or give it back to GNOME.
+
+    GNOME opens the Activities overview on a tap via mutter's overlay-key; we
+    clear that so both do not fire, and keep the overview on Windows+S.
+    """
+    _ensure_backup_keys({
+        "overlay_key": _gsettings("get", MUTTER, "overlay-key")[1],
+        "toggle_overview": _gsettings("get", SHELL_KEYS, "toggle-overview")[1],
+    })
+    if action in ("grid", "quick"):
+        _gsettings("set", MUTTER, "overlay-key", "")
+        _, cur = _gsettings("get", SHELL_KEYS, "toggle-overview")
+        cur_list = _parse_strv(cur)
+        if OVERVIEW_ACCEL.lower() not in [c.lower() for c in cur_list]:
+            _gsettings("set", SHELL_KEYS, "toggle-overview", _strv(cur_list + [OVERVIEW_ACCEL]))
+        what = "All Applications" if action == "grid" else "Quick Search"
+        return f"Windows key (tap) -> Nova {what}; GNOME Activities overview -> Windows+S"
+    _gsettings("set", MUTTER, "overlay-key", "Super_L")
+    return "Windows key (tap) -> GNOME Activities overview"
+
+
 def backup_path() -> Path:
     return paths.state_dir() / "gnome-defaults-backup.json"
 
@@ -203,10 +247,12 @@ def set_as_default(settings) -> list[str]:
             "toggle_application_view": _gsettings("get", SHELL_KEYS, "toggle-application-view")[1],
             "switch_input_source": _gsettings("get", WM_KEYS, "switch-input-source")[1],
             "switch_input_source_backward": _gsettings("get", WM_KEYS, "switch-input-source-backward")[1],
+            "overlay_key": _gsettings("get", MUTTER, "overlay-key")[1],
+            "toggle_overview": _gsettings("get", SHELL_KEYS, "toggle-overview")[1],
             "ubuntu_dock_enabled": _extension_enabled(UBUNTU_DOCK),
             "autostart": autostart_enabled(),
             "nova": {k: settings[k] for k in ("shortcut_quick", "shortcut_grid", "dock_enabled",
-                                              "dock_autohide", "dock_reserve_space")},
+                                              "dock_autohide", "dock_reserve_space", "windows_key_action")},
         }
         paths.atomic_write(bp, json.dumps(backup, indent=2))
         log_lines.append(f"saved original GNOME values to {bp}")
@@ -218,7 +264,7 @@ def set_as_default(settings) -> list[str]:
         _, cur = _gsettings("get", WM_KEYS, key)
         accel = DEFAULT_QUICK if key == "switch-input-source" else "<Shift><Super>space"
         _gsettings("set", WM_KEYS, key, _strv(_without(_parse_strv(cur), accel)))
-    log_lines.append("GNOME: Super+A no longer opens the stock app grid; Super+Space no longer switches layouts")
+    log_lines.append("GNOME: Windows+A no longer opens the stock app grid; Windows+Space no longer switches layouts")
     # GNOME Shell releases its key grabs asynchronously; if gsd-media-keys tries
     # to grab before that, it logs "Failed to grab accelerator" and the
     # shortcut silently does nothing.  Wait, and re-assert the bindings below.
@@ -241,7 +287,12 @@ def set_as_default(settings) -> list[str]:
         rc, out = _run(["gnome-extensions", "disable", UBUNTU_DOCK])
         log_lines.append("Ubuntu Dock disabled" if rc == 0 else f"could not disable Ubuntu Dock: {out}")
 
-    # 4. Start at login.
+    # 4. Windows key tap opens All Applications (like a Start menu).
+    _ensure_backup_keys({"nova_windows_key_action": settings["windows_key_action"]})
+    settings.set("windows_key_action", "grid")
+    log_lines.append(apply_windows_key("grid"))
+
+    # 5. Start at login.
     set_autostart(True)
     log_lines.append(f"autostart enabled ({autostart_path()})")
     return log_lines
@@ -257,20 +308,26 @@ def restore_default(settings) -> list[str]:
     except (OSError, ValueError):
         return [f"no backup found at {bp}; nothing to restore"]
     out = [remove_shortcuts()]
-    for key, schema, bkey in (("toggle-application-view", SHELL_KEYS, "toggle_application_view"),
+    for key, schema, bkey in (("overlay-key", MUTTER, "overlay_key"),
+                              ("toggle-overview", SHELL_KEYS, "toggle_overview"),
+                              ("toggle-application-view", SHELL_KEYS, "toggle_application_view"),
                               ("switch-input-source", WM_KEYS, "switch_input_source"),
                               ("switch-input-source-backward", WM_KEYS, "switch_input_source_backward")):
         val = backup.get(bkey, "")
         rc, msg = _gsettings("set", schema, key, val) if val else _gsettings("reset", schema, key)
         if rc != 0:
             _gsettings("reset", schema, key)
-    out.append("GNOME keybindings restored (Super+A app grid, Super+Space input switching)")
+    out.append("GNOME keybindings restored (Windows tap = Activities, Windows+A app grid, "
+               "Windows+Space input switching)")
     if backup.get("ubuntu_dock_enabled") and not _extension_enabled(UBUNTU_DOCK):
         rc, msg = _run(["gnome-extensions", "enable", UBUNTU_DOCK])
         out.append("Ubuntu Dock re-enabled" if rc == 0 else f"could not re-enable Ubuntu Dock: {msg}")
     set_autostart(bool(backup.get("autostart")))
     out.append(f"autostart {'kept' if backup.get('autostart') else 'disabled'}")
-    for k, v in (backup.get("nova") or {}).items():
+    nova = dict(backup.get("nova") or {})
+    if "windows_key_action" not in nova:
+        nova["windows_key_action"] = backup.get("nova_windows_key_action", "overview")
+    for k, v in nova.items():
         try:
             settings.set(k, v)
         except (KeyError, ValueError):

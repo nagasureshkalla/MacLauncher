@@ -78,6 +78,9 @@ def test_grid_keyboard_navigation_and_paging(app):
         key(g, Gdk.KEY_Right)
     assert g.selected == 7  # crossed onto page 2, clamped at the end
     assert spin(lambda: round(g.carousel.get_position()) == 1)
+    # The grid takes real keyboard focus; anything typed meanwhile lands in its
+    # search field (and Esc would then clear it first), so start from empty.
+    g.search.set_text("")
     key(g, Gdk.KEY_Escape)
     assert spin(lambda: not g.get_visible())
 

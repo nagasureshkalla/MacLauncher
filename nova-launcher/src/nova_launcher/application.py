@@ -107,6 +107,8 @@ class NovaApplication(Adw.Application):
         # covers D-Bus activation, which has no command line at all.
         GLib.idle_add(lambda: (self.update_dock_visibility(), self.update_widget_visibility(),
                                GLib.SOURCE_REMOVE)[2])
+        if self.dock_supported() and not x11.watch_super_tap(self._on_windows_key):
+            log.warning("Windows-key tap detection unavailable")
         log.info("startup done in %.0f ms (apps from cache: %s)",
                  (time.perf_counter() - self.t_start) * 1000, len(self.index) if cached else "no")
 
@@ -206,6 +208,11 @@ class NovaApplication(Adw.Application):
             self._apply_theme()
         elif key == "widget_enabled":
             self.update_widget_visibility()
+        elif key == "windows_key_action":
+            from .system import desktop_integration
+
+            threading.Thread(target=desktop_integration.apply_windows_key, args=(self.settings[key],),
+                             daemon=True).start()
 
     def _apply_theme(self) -> None:
         sm = Adw.StyleManager.get_default()
@@ -243,6 +250,23 @@ class NovaApplication(Adw.Application):
                 self.dock.show_dock()
             elif not want and self.dock.get_visible():
                 self.dock.set_visible(False)
+
+    def _on_windows_key(self) -> None:
+        action = self.settings["windows_key_action"]
+        if action == "overview" or self._session_locked():
+            return  # GNOME handles it / ignore taps on the lock screen
+        log.debug("Windows key tap -> %s", action)
+        (self.grid if action == "grid" else self.quick).toggle()
+
+    def _session_locked(self) -> bool:
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            res = bus.call_sync("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver",
+                                "GetActive", None, GLib.VariantType.new("(b)"),
+                                Gio.DBusCallFlags.NO_AUTO_START, 300, None)
+            return bool(res.unpack()[0])
+        except GLib.Error:
+            return False
 
     def update_widget_visibility(self) -> None:
         # Needs X11 to sit below windows in a screen corner (same as the dock).

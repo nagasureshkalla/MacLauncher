@@ -86,6 +86,15 @@ class SettingsWindow(Adw.PreferencesWindow):
         g.add(row)
         page.add(g)
 
+        g = Adw.PreferencesGroup(title="Windows key",
+                                 description="On Linux the Windows key is called “Super”. A quick tap (no other "
+                                             "key) can open Nova; Windows+<key> shortcuts keep working.")
+        self._combo(g, "windows_key_action", "Tap the Windows key to open",
+                    [("grid", "All Applications"), ("quick", "Quick Search"),
+                     ("overview", "GNOME Activities (default)")],
+                    "When Nova takes the tap, GNOME's overview moves to Windows+S")
+        page.add(g)
+
         g = Adw.PreferencesGroup(
             title="Keyboard shortcuts",
             description="GNOME custom shortcuts that run “gapplication action io.github.nova.Launcher …”. "

@@ -304,31 +304,176 @@ def close_window(xid: int, timestamp: int = 0) -> None:
     _x().XFlush(_open())
 
 
-def watch_root(callback: Callable[[], None]) -> int:
-    """Call ``callback`` when the window list or active window changes.
+# -- event dispatch ----------------------------------------------------------------
+# One GLib fd watch on our X connection feeds every listener below, so all of
+# this is event-driven: no timers, zero CPU while nothing happens.
+_property_listeners: list[tuple[set, Callable[[], None]]] = []
+_raw_key_listeners: list[Callable[[int, int], None]] = []  # (evtype, keycode)
+_dispatch_source = 0
+_xi_opcode = 0
+_event_dpy = None  # dedicated connection: only the dispatcher ever reads from it
 
-    The X connection fd is added to the GLib main loop, so this is purely
-    event-driven: no timers, zero CPU while nothing changes.
+
+def _events_display():
+    """A second X connection used only for receiving events.
+
+    Sharing one connection is a classic Xlib + main-loop bug: any query on it
+    (window list, moving the dock) pulls pending events into Xlib's private
+    queue, the socket then looks idle, and the events are only seen at the
+    next unrelated wake-up.  Here nothing but the dispatcher touches it.
     """
+    global _event_dpy
+    if _event_dpy is None:
+        _open()  # loads libX11 and installs the error handler
+        _event_dpy = _x().XOpenDisplay(None) or None
+    return _event_dpy
+
+GenericEvent = 35
+XI_RawKeyPress, XI_RawKeyRelease, XI_RawButtonPress = 13, 14, 15
+XIAllMasterDevices = 1
+
+
+class XGenericEventCookie(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int),
+                ("display", ctypes.c_void_p), ("extension", ctypes.c_int), ("evtype", ctypes.c_int),
+                ("cookie", ctypes.c_uint), ("data", ctypes.c_void_p)]
+
+
+class XIRawEventHead(ctypes.Structure):
+    """Leading fields of XIRawEvent (all we need: evtype and detail=keycode)."""
+    _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int),
+                ("display", ctypes.c_void_p), ("extension", ctypes.c_int), ("evtype", ctypes.c_int),
+                ("time", ctypes.c_ulong), ("deviceid", ctypes.c_int), ("sourceid", ctypes.c_int),
+                ("detail", ctypes.c_int), ("flags", ctypes.c_int)]
+
+
+class XIEventMask(ctypes.Structure):
+    _fields_ = [("deviceid", ctypes.c_int), ("mask_len", ctypes.c_int), ("mask", ctypes.POINTER(ctypes.c_ubyte))]
+
+
+def _ensure_dispatch() -> None:
+    global _dispatch_source
+    if _dispatch_source:
+        return
     from gi.repository import GLib
 
-    dpy = _open()
-    root = _x().XDefaultRootWindow(dpy)
-    _x().XSelectInput(dpy, root, PropertyChangeMask)
-    _x().XFlush(dpy)
-    watched = {atom("_NET_CLIENT_LIST"), atom("_NET_ACTIVE_WINDOW")}
+    dpy = _events_display()
     ev = XEvent()
 
     def on_readable(_fd, _cond):
-        fire = False
+        fire = set()
         while _x().XPending(dpy):
             _x().XNextEvent(dpy, ctypes.byref(ev))
             if ev.type == PropertyNotify:
                 # XPropertyEvent.atom is the 6th long-sized field.
-                if ev.pad[5] in watched:
-                    fire = True
-        if fire:
-            callback()
+                for i, (atoms, _cb) in enumerate(_property_listeners):
+                    if ev.pad[5] in atoms:
+                        fire.add(i)
+            elif ev.type == GenericEvent and _xi_opcode:
+                cookie = ctypes.cast(ctypes.byref(ev), ctypes.POINTER(XGenericEventCookie)).contents
+                if cookie.extension == _xi_opcode and _x().XGetEventData(dpy, ctypes.byref(cookie)):
+                    try:
+                        raw = ctypes.cast(cookie.data, ctypes.POINTER(XIRawEventHead)).contents
+                        for cb in list(_raw_key_listeners):
+                            cb(raw.evtype, raw.detail)
+                    finally:
+                        _x().XFreeEventData(dpy, ctypes.byref(cookie))
+        for i in fire:
+            _property_listeners[i][1]()
         return GLib.SOURCE_CONTINUE
 
-    return GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, _x().XConnectionNumber(dpy), GLib.IOCondition.IN, on_readable)
+    _x().XGetEventData.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    _x().XFreeEventData.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    _dispatch_source = GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, _x().XConnectionNumber(dpy),
+                                             GLib.IOCondition.IN, on_readable)
+
+
+def watch_root(callback: Callable[[], None]) -> int:
+    """Call ``callback`` when the window list or active window changes."""
+    dpy = _events_display()
+    _x().XSelectInput(dpy, _x().XDefaultRootWindow(dpy), PropertyChangeMask)
+    _x().XFlush(dpy)
+    _property_listeners.append(({atom("_NET_CLIENT_LIST"), atom("_NET_ACTIVE_WINDOW")}, callback))
+    _ensure_dispatch()
+    return len(_property_listeners)
+
+
+class SuperTapDetector:
+    """Recognise a *tap* of the Windows (Super) key: press and release with no
+    other key or mouse button in between, within ``max_ms``.
+
+    Pure state machine (unit-tested); fed by raw XInput2 events.  Holding the
+    key for Windows+A, Windows+Space, Windows+drag etc. never counts as a tap.
+    """
+
+    def __init__(self, super_codes: set[int], on_tap: Callable[[], None], max_ms: int = 600,
+                 clock: Callable[[], float] | None = None):
+        import time
+
+        self.codes = super_codes
+        self.on_tap = on_tap
+        self.max_ms = max_ms
+        self.clock = clock or time.monotonic
+        self.down_at: float | None = None
+        self.spoiled = False
+
+    def feed(self, evtype: int, detail: int) -> None:
+        if evtype == XI_RawKeyPress:
+            if detail in self.codes:
+                if self.down_at is None:  # ignore auto-repeat
+                    self.down_at = self.clock()
+                    self.spoiled = False
+            elif self.down_at is not None:
+                self.spoiled = True  # it was a Windows+<key> combination
+        elif evtype == XI_RawButtonPress:
+            if self.down_at is not None:
+                self.spoiled = True  # Windows+click / drag
+        elif evtype == XI_RawKeyRelease and detail in self.codes and self.down_at is not None:
+            held_ms = (self.clock() - self.down_at) * 1000
+            tap = not self.spoiled and held_ms <= self.max_ms
+            self.down_at = None
+            self.spoiled = False
+            if tap:
+                self.on_tap()
+
+
+def watch_super_tap(on_tap: Callable[[], None]) -> bool:
+    """Listen (without grabbing) for taps of the Windows key.  Returns success.
+
+    Raw XInput2 events are delivered to every client that asks, regardless of
+    grabs, so this never interferes with Windows+<key> shortcuts or other apps.
+    """
+    global _xi_opcode
+    dpy = _events_display()
+    if dpy is None:
+        return False
+    if not _xi_opcode:
+        op, ev, er = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+        _x().XQueryExtension.argtypes = [ctypes.c_void_p, ctypes.c_char_p] + [ctypes.c_void_p] * 3
+        if not _x().XQueryExtension(dpy, b"XInputExtension", ctypes.byref(op), ctypes.byref(ev), ctypes.byref(er)):
+            log.warning("XInputExtension missing; Windows-key tap unavailable")
+            return False
+        try:
+            xi = ctypes.CDLL(ctypes.util.find_library("Xi") or "libXi.so.6")
+        except OSError:
+            log.warning("libXi not installed; Windows-key tap unavailable")
+            return False
+        major, minor = ctypes.c_int(2), ctypes.c_int(2)
+        xi.XIQueryVersion.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        if xi.XIQueryVersion(dpy, ctypes.byref(major), ctypes.byref(minor)) != 0:
+            log.warning("XInput 2 not supported by the X server")
+            return False
+        mask = (ctypes.c_ubyte * 4)()
+        for bit in (XI_RawKeyPress, XI_RawKeyRelease, XI_RawButtonPress):
+            mask[bit >> 3] |= 1 << (bit & 7)
+        evmask = XIEventMask(XIAllMasterDevices, 4, ctypes.cast(mask, ctypes.POINTER(ctypes.c_ubyte)))
+        xi.XISelectEvents.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(XIEventMask), ctypes.c_int]
+        xi.XISelectEvents(dpy, _x().XDefaultRootWindow(dpy), ctypes.byref(evmask), 1)
+        _x().XFlush(dpy)
+        _xi_opcode = op.value
+    _x().XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    codes = {_x().XKeysymToKeycode(dpy, ks) for ks in (0xFFEB, 0xFFEC)} - {0}  # Super_L, Super_R
+    detector = SuperTapDetector(codes, on_tap)
+    _raw_key_listeners.append(detector.feed)
+    _ensure_dispatch()
+    return True

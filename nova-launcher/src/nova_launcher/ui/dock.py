@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import math
+from pathlib import Path
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("nova.dock")
 
+ALL_APPS_ICON = str(Path(__file__).resolve().parents[1] / "resources" / "icons" / "nova-all-apps.svg")
+
 TOOLTIP_SPACE = 40
 EDGE_MARGIN = 8
 BAR_PAD = 8  # padding inside the glass bar (CSS uses the same)
@@ -42,7 +45,7 @@ SEP_SIZE = 13
 
 @dataclass
 class Slot:
-    kind: str  # pinned | running | recent | trash | separator
+    kind: str  # launchpad | pinned | running | recent | trash | separator
     record: AppRecord | None = None
 
 
@@ -65,7 +68,12 @@ class DockItem(Gtk.Box):
         self.slot = slot
         self.scale = 1.0
         self.add_css_class("nova-dock-item")
-        icon = "user-trash" if slot.kind == "trash" else (slot.record.icon if slot.record else "")
+        if slot.kind == "launchpad":
+            icon = ALL_APPS_ICON
+        elif slot.kind == "trash":
+            icon = "user-trash"
+        else:
+            icon = slot.record.icon if slot.record else ""
         self.image = Gtk.Image.new_from_gicon(gicon_for(icon))
         self.image.set_pixel_size(size)
         self.dot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
@@ -103,6 +111,8 @@ class DockItem(Gtk.Box):
 
     @property
     def title(self) -> str:
+        if self.slot.kind == "launchpad":
+            return "All Applications"
         return "Trash" if self.slot.kind == "trash" else (self.slot.record.name if self.slot.record else "")
 
     def set_scale(self, scale: float, base: int) -> None:
@@ -247,7 +257,8 @@ class DockWindow(Gtk.Window):
         idx = self.app.index
         pinned = [idx.get(i) for i in s["pinned_apps"]]
         pinned = [r for r in pinned if r is not None]
-        out = [Slot("pinned", r) for r in pinned]
+        # "All Applications" comes first, like Launchpad next to Finder.
+        out = [Slot("launchpad")] + [Slot("pinned", r) for r in pinned]
         shown = {r.id for r in pinned}
         extra: list[Slot] = []
         if s["dock_show_running"]:
@@ -513,6 +524,9 @@ class DockWindow(Gtk.Window):
         if item.slot.kind == "trash":
             self.app.open_trash()
             return
+        if item.slot.kind == "launchpad":
+            self.app.grid.toggle()
+            return
         record = item.slot.record
         if record is None:
             return
@@ -530,6 +544,12 @@ class DockWindow(Gtk.Window):
     def show_menu(self, item: DockItem) -> None:
         if item.slot.kind == "trash":
             popup_menu(item, [("Open Trash", self.app.open_trash)])
+            return
+        if item.slot.kind == "launchpad":
+            popup_menu(item, [("All Applications", self.app.grid.open),
+                              ("Quick Search", self.app.quick.open),
+                              None,
+                              ("Nova Settings", self.app.show_settings)])
             return
         record = item.slot.record
         extra = []
