@@ -126,3 +126,23 @@ def test_shortcut_actions_toggle_windows(app):
     assert spin(lambda: app.grid.get_visible())
     app.activate_action("toggle-grid", None)
     assert spin(lambda: not app.grid.get_visible())
+
+
+def test_commands_widget_runs_commands(app):
+    from nova_launcher.system import x11
+
+    if not app.dock_supported():
+        pytest.skip("commands widget needs X11")
+    assert spin(lambda: len(app.index) == 8)
+    app.settings.set("widget_enabled", True)
+    app.update_widget_visibility()
+    w = app.widget
+    assert spin(lambda: w.get_visible())
+    assert w.list.get_row_at_index(0).command_id == "grid"
+    w.run("grid")
+    assert spin(lambda: app.grid.get_visible())
+    app.grid.dismiss()
+    app.settings.set("widget_collapsed", True)
+    assert not w.body.get_reveal_child()
+    app.settings.set("widget_enabled", False)
+    assert spin(lambda: not w.get_visible())

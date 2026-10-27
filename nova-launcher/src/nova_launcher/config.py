@@ -75,6 +75,11 @@ SCHEMA: dict[str, Option] = {
     "dock_recent_count": Option(3, int, min=0, max=8),
     "dock_monitor": Option("primary", str, description="'primary' or a connector name such as HDMI-0"),
     "pinned_apps": Option(list(DEFAULT_PINNED), list),
+    # Commands widget
+    "widget_enabled": Option(True, bool, description="Show the commands widget on the desktop"),
+    "widget_position": Option("top-right", str, choices=("top-right", "top-left", "bottom-right", "bottom-left")),
+    "widget_collapsed": Option(False, bool),
+    "widget_monitor": Option("primary", str),
     # Launchpad grid
     "grid_columns": Option(7, int, min=3, max=12),
     "grid_rows": Option(5, int, min=2, max=8),

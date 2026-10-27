@@ -75,6 +75,8 @@ def screenshot_tour(app, out_dir: Path) -> None:
     step(350, lambda: app.quick.dismiss())
     if app.dock is not None:
         step(400, snap(app.dock, "dock.png"))
+    # Created lazily after startup, so look it up when the step runs.
+    step(300, lambda: app.widget and snap(app.widget, "commands-widget.png")())
     step(350, lambda: app.show_settings())
     step(900, lambda: snap(app.settings_window, "settings.png")())
     step(200, lambda: app.quit_app())

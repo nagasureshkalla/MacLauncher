@@ -69,6 +69,16 @@ class SettingsWindow(Adw.PreferencesWindow):
                     "Reduced motion replaces bounces and zooms with fades")
         page.add(g)
 
+        g = Adw.PreferencesGroup(title="Commands widget",
+                                 description="A small panel on the desktop listing every Nova command, "
+                                             "starting with All Applications. Stays below your windows.")
+        self._switch(g, "widget_enabled", "Show commands widget")
+        self._combo(g, "widget_position", "Position",
+                    [("top-right", "Top right"), ("top-left", "Top left"),
+                     ("bottom-right", "Bottom right"), ("bottom-left", "Bottom left")])
+        self._switch(g, "widget_collapsed", "Collapsed", "Show only the title bar")
+        page.add(g)
+
         g = Adw.PreferencesGroup(title="Startup")
         row = Adw.SwitchRow(title="Start at login", subtitle="Adds ~/.config/autostart/nova-launcher.desktop")
         row.set_active(integ.autostart_enabled())

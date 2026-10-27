@@ -165,6 +165,49 @@ def set_strut(xid: int, values: list[int]) -> None:
     _x().XFlush(_open())
 
 
+def change_state(xid: int, add: bool, *states: str) -> None:
+    """Ask the WM to add/remove _NET_WM_STATE atoms on a *mapped* window.
+
+    Writing the property directly only works before mapping (and GTK rewrites
+    it on map), so mapped windows need the EWMH client message.
+    """
+    for i in range(0, len(states), 2):
+        pair = states[i:i + 2]
+        ev = XEvent()
+        ev.xclient.type = ClientMessage
+        ev.xclient.send_event = 1
+        ev.xclient.window = xid
+        ev.xclient.message_type = atom("_NET_WM_STATE")
+        ev.xclient.format = 32
+        ev.xclient.data[0] = 1 if add else 0
+        ev.xclient.data[1] = atom(pair[0])
+        ev.xclient.data[2] = atom(pair[1]) if len(pair) > 1 else 0
+        ev.xclient.data[3] = 2  # source: pager / user action
+        _x().XSendEvent(_open(), _root(), 0, SubstructureRedirectMask | SubstructureNotifyMask, ctypes.byref(ev))
+    _x().XFlush(_open())
+
+
+def window_states(xid: int) -> list[str]:
+    """Names of the window's current _NET_WM_STATE atoms (for checks/tests)."""
+    r = _get_property(xid, "_NET_WM_STATE", XA_ATOM)
+    if not r:
+        return []
+    names = {v: k for k, v in _atoms.items()}
+    return [names.get(a, str(a)) for a in _ulongs(r[2], r[1])]
+
+
+def make_desktop_widget(xid: int) -> None:
+    """Desktop gadget: kept below normal windows, on every workspace, no taskbar/Alt+Tab."""
+    _set_atoms(xid, "_NET_WM_WINDOW_TYPE", ["_NET_WM_WINDOW_TYPE_UTILITY"])
+    _set_atoms(xid, "_NET_WM_STATE", ["_NET_WM_STATE_BELOW", "_NET_WM_STATE_STICKY",
+                                       "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER"])
+    _set_cardinals(xid, "_NET_WM_DESKTOP", [0xFFFFFFFF])
+    # EWMH: a user time of 0 means "do not focus on map" (prevents the
+    # demands-attention / "is ready" notification).
+    _set_cardinals(xid, "_NET_WM_USER_TIME", [0])
+    _x().XFlush(_open())
+
+
 def make_utility(xid: int) -> None:
     """Quick-launcher popup: no taskbar entry, kept above."""
     _set_atoms(xid, "_NET_WM_STATE", ["_NET_WM_STATE_ABOVE", "_NET_WM_STATE_SKIP_TASKBAR",

@@ -43,6 +43,8 @@ COMMANDS = [
      ("settings", "preferences", "nova", "config")),
     ("grid", "Show All Applications", "Open the Launchpad grid", "view-app-grid-symbolic",
      ("launchpad", "grid", "all apps", "applications")),
+    ("toggle-widget", "Show/Hide Commands Widget", "The on-screen list of Nova commands",
+     "view-list-symbolic", ("widget", "commands", "help", "cheat sheet", "shortcuts")),
     ("diagnose", "Run System Diagnostics", "Find out why apps or Files open slowly", "utilities-system-monitor",
      ("diagnose", "diagnostics", "slow", "doctor")),
 ]

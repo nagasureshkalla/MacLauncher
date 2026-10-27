@@ -4,7 +4,7 @@ Date: 2026-10-26 · Ubuntu 24.04.4 LTS, GNOME Shell 46.0, **X11** session,
 NVIDIA RTX 3090 (driver 580.178.04), Python 3.12.3, GTK 4.14.5, libadwaita 1.5.0.
 Only results that were actually executed are listed.
 
-## Automated tests — `pytest`: 72 passed, 0 failed (3 consecutive runs)
+## Automated tests — `pytest`: 77 passed, 0 failed
 
 | Area (requirement) | Tests | File |
 |---|---|---|
@@ -40,6 +40,8 @@ Only results that were actually executed are listed.
 | **Live GTK**: index without cache, grid keyboard nav + paging + Esc | 2 | test_windows.py |
 | **Live GTK**: grid search + Enter, quick ↑/↓/Enter/Esc | 2 | test_windows.py |
 | **Live GTK**: shortcut actions toggle-quick / toggle-grid | 1 | test_windows.py |
+| Make-default set/restore round trip, idempotent backup, strut maths | 3 | test_default_launcher.py |
+| Commands widget order (All Applications first), labels; live run/collapse/hide | 2 | test_ui_logic.py, test_windows.py |
 
 Bugs found by these tests and fixed: entries without `Exec` were shown;
 launching an app whose binary was removed after indexing raised instead of
@@ -55,6 +57,8 @@ reporting; `x11` helpers could dereference libX11 before loading it.
 | Focus on shortcut open (X11, unlocked session) | ✅ 4/4 focused within 150 ms; focus returned on close |
 | Uninstall in a throwaway HOME | ✅ only manifest files removed; unrelated apps, tools, documents and settings kept |
 | `.deb` build + `desktop-file-validate` | ✅ (`lintian` not installed; `.deb` not installed system-wide — needs sudo) |
+| Real key presses (XTest): Super+Space -> quick search, Super+A -> Launchpad, Esc returns focus | ✅ |
+| Commands widget: corner placement, BELOW+STICKY, no focus steal, real click on All Applications opens Launchpad | ✅ |
 | Screenshot tour (7 views rendered from the live app) | ✅ docs/screenshots/ |
 
 ## Benchmarks — see README "Performance" and docs/benchmark-results.json

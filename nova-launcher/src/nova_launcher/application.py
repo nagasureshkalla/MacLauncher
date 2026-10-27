@@ -45,6 +45,7 @@ class NovaApplication(Adw.Application):
         self.quick = None
         self.grid = None
         self.dock = None
+        self.widget = None
         self.settings_window = None
         self.files: FileManager | None = None
         self._bench_file = os.environ.get("NOVA_BENCH_FILE")
@@ -104,7 +105,8 @@ class NovaApplication(Adw.Application):
         self._held = True
         # Runs after command-line handling (so --no-dock is respected) and also
         # covers D-Bus activation, which has no command line at all.
-        GLib.idle_add(lambda: (self.update_dock_visibility(), GLib.SOURCE_REMOVE)[1])
+        GLib.idle_add(lambda: (self.update_dock_visibility(), self.update_widget_visibility(),
+                               GLib.SOURCE_REMOVE)[2])
         log.info("startup done in %.0f ms (apps from cache: %s)",
                  (time.perf_counter() - self.t_start) * 1000, len(self.index) if cached else "no")
 
@@ -155,7 +157,7 @@ class NovaApplication(Adw.Application):
         log.info("quitting")
         if self.index:
             self.index.unwatch()
-        for w in (self.quick, self.grid, self.dock, self.settings_window):
+        for w in (self.quick, self.grid, self.dock, self.widget, self.settings_window):
             if w is not None:
                 w.destroy()
         if self._held:
@@ -178,6 +180,7 @@ class NovaApplication(Adw.Application):
         add("grid", lambda _p: self.grid.open())
         add("diagnose", lambda _p: self.run_diagnostics_async(self._open_report))
         add("quit", lambda _p: self.quit_app())
+        add("toggle-widget", lambda _p: self.settings.set("widget_enabled", not self.settings["widget_enabled"]))
         add("open-uri", lambda p: self.open_place(Place("uri", p.get_string(), p.get_string(), "folder")), "s")
         add("launch", lambda p: self._launch_id(p.get_string()), "s")
 
@@ -201,6 +204,8 @@ class NovaApplication(Adw.Application):
             self.files.timeout_ms = self.settings[key]
         elif key == "animation_level":
             self._apply_theme()
+        elif key == "widget_enabled":
+            self.update_widget_visibility()
 
     def _apply_theme(self) -> None:
         sm = Adw.StyleManager.get_default()
@@ -208,7 +213,7 @@ class NovaApplication(Adw.Application):
                             .get(self.settings["theme"], Adw.ColorScheme.PREFER_LIGHT))
         dark = sm.get_dark()
         level = self.settings["animation_level"]
-        for w in (self.quick, self.grid, self.dock, self.settings_window):
+        for w in (self.quick, self.grid, self.dock, self.widget, self.settings_window):
             if w is None:
                 continue
             (w.add_css_class if dark else w.remove_css_class)("nova-dark")
@@ -238,6 +243,20 @@ class NovaApplication(Adw.Application):
                 self.dock.show_dock()
             elif not want and self.dock.get_visible():
                 self.dock.set_visible(False)
+
+    def update_widget_visibility(self) -> None:
+        # Needs X11 to sit below windows in a screen corner (same as the dock).
+        want = self.settings["widget_enabled"] and self.dock_supported()
+        if want and self.widget is None:
+            from .ui.commands_widget import CommandsWidget
+
+            self.widget = CommandsWidget(self)
+            self._apply_theme()
+        if self.widget is not None:
+            if want and not self.widget.get_visible():
+                self.widget.show_widget()
+            elif not want and self.widget.get_visible():
+                self.widget.set_visible(False)
 
     def show_settings(self) -> None:
         if self.settings_window is None:

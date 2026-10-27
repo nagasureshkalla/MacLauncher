@@ -97,3 +97,22 @@ def test_monitor_choice_and_placement():
     assert dock_origin("left", a.geometry, 100, 600) == (0, 167 + 212)
     assert dock_origin("right", b.geometry, 100, 600) == (1280 + 1820, 240)
     assert centered(b.workarea, 680, 420, 0.25)[0] == 1280 + 620
+
+
+def test_widget_commands_start_with_all_applications(tmp_path):
+    from nova_launcher.ui.commands_widget import TERMINAL_COMMANDS, widget_commands
+
+    s = Settings(tmp_path / "s.json")
+    s.set("shortcut_grid", "<Super>a")
+    s.set("shortcut_quick", "<Super>space")
+    cmds = widget_commands(s)
+    assert cmds[0].id == "grid" and cmds[0].title == "All Applications"
+    assert cmds[0].shortcut == "Super+A" and cmds[1].shortcut == "Super+Space"
+    ids = [c.id for c in cmds]
+    assert ids == ["grid", "quick", "files", "downloads", "toggle-dock", "settings", "diagnose", "repair", "quit"]
+    assert next(c for c in cmds if c.id == "toggle-dock").title == "Hide Dock"
+    s.set("dock_enabled", False)
+    assert next(c for c in widget_commands(s) if c.id == "toggle-dock").title == "Show Dock"
+    assert "toggle-dock" not in [c.id for c in widget_commands(s, dock_supported=False)]
+    # Every CLI flag the widget advertises must exist.
+    assert all(c.startswith("nova-launcher --") for c, _ in TERMINAL_COMMANDS)

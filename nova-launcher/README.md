@@ -7,9 +7,9 @@ written in Python 3.12 with **GTK 4 + libadwaita** (no Electron, no web view).
 |---|---|
 | ![quick](docs/screenshots/quick-launcher-fire.png) | ![grid](docs/screenshots/launchpad-grid.png) |
 
-| Dock (X11) | Settings |
-|---|---|
-| ![dock](docs/screenshots/dock.png) | ![settings](docs/screenshots/settings.png) |
+| Dock (X11) | Settings | Commands widget |
+|---|---|---|
+| ![dock](docs/screenshots/dock.png) | ![settings](docs/screenshots/settings.png) | ![widget](docs/screenshots/commands-widget.png) |
 
 Screenshots are rendered by GTK from the running app (`--screenshot DIR`), so
 they never capture other windows.
@@ -29,6 +29,14 @@ they never capture other windows.
   middle-click for a new instance, right-click menu (desktop actions, Keep in
   Dock, Quit), drag-to-pin and reorder, launch bounce, trash, bottom/left/right,
   auto-hide, multi-monitor.
+* **Commands widget** (X11): a small panel in a screen corner listing every
+  Nova command — **All Applications** first, then Quick Search, Files,
+  Downloads, Show/Hide Dock, Settings, Diagnose, Repair, Quit — with their
+  shortcuts. Click a row to run it; the *Terminal commands* section lists every
+  `nova-launcher` flag (click to copy). It stays below your windows, on every
+  workspace, out of Alt+Tab, and never takes focus on its own. Collapse it to a
+  title bar, move it to any corner, or hide it (Settings → General, or search
+  "widget" in quick search).
 * **Search**: exact > prefix > word > executable/ID > substring > initials ("vsc")
   > keywords/aliases > generic name > categories > description, plus fuzzy
   subsequence and typo tolerance ("firefx", "setings"), with a small local
@@ -237,7 +245,7 @@ stop indexing `~/Desktop` recursively and reset Tracker's cache-only index.
 ```bash
 python3 -m venv --system-site-packages .venv   # uses Ubuntu's PyGObject
 .venv/bin/pip install pytest
-.venv/bin/python -m pytest -q                  # 72 tests (5 need a graphical session)
+.venv/bin/python -m pytest -q                  # 77 tests (6 need a graphical session)
 PYTHONPATH=src python3 -m nova_launcher.main --quick --debug
 python3 scripts/benchmark.py
 PYTHONPATH=src python3 -m nova_launcher.main --screenshot docs/screenshots
