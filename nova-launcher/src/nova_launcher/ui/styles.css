@@ -329,7 +329,7 @@ window.nova-grid-window.nova-light .nova-grid-dim { background-color: rgba(255, 
 .nova-island-tile:hover { background-color: rgba(255, 255, 255, 0.10); }
 .nova-island-tile:active { transform: scale(0.94); }
 .nova-island-tile image { -gtk-icon-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
-.nova-island-tile-name { font-size: 11.5px; font-weight: 500; }
+.nova-island-tile-name { font-size: 11px; font-weight: 500; line-height: 1.15; }
 .nova-island-dot {
   min-width: 4px;
   min-height: 4px;
@@ -339,17 +339,6 @@ window.nova-grid-window.nova-light .nova-grid-dim { background-color: rgba(255, 
 .nova-island-tile.active .nova-island-dot {
   background-color: #30d158;
   box-shadow: 0 0 6px rgba(48, 209, 88, 0.8);
-}
-.nova-island-badge {
-  font-size: 10px;
-  font-weight: 700;
-  min-width: 16px;
-  min-height: 16px;
-  padding: 0 4px;
-  border-radius: 99px;
-  background-color: #0a84ff;
-  color: white;
-  margin: -4px -6px 0 0;
 }
 .nova-island-detail {
   font-size: 12px;

@@ -47,11 +47,11 @@ they never capture other windows.
 * **Dynamic Island** (X11): a black pill at the top centre of the main
   monitor, just under the GNOME top bar. Compact, it shows the focused app
   and the icons of the next few running apps; when a new app starts it
-  briefly grows to say so. **Hover or click** to expand it into tiles of every
-  running app (most recently used first, a green dot on the focused one, a
-  badge with the window count) — click a tile to switch, click again to cycle
-  that app's windows, right-click to pick a specific window, open a New
-  Window or Quit. **Scroll** over the compact pill to flip between apps. By
+  briefly grows to say so. **Hover or click** to expand it into **one tile per open window**
+  (three terminals = three tiles, each labelled with its window title; most
+  recently used app first, a green dot on the focused window) — click a tile
+  to switch to that window, right-click to Close Window, open a New Window or
+  Quit the app. **Scroll** over the compact pill to flip between apps. By
   default maximized windows stop below it (Settings → General → Dynamic
   Island → *Keep windows below it*); it can be turned off there too. Uses the
   same event-driven window list as the dock: no polling, zero idle CPU.

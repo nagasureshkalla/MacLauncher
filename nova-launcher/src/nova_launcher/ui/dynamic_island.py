@@ -6,8 +6,9 @@ pill morphs smoothly between them):
 * compact   focused app's icon and name, plus the next few apps' icons
 * toast     brief "App opened" notice when a new app starts
 * expanded  on hover or click: every running app as a tile; click to switch
-            (click again to cycle that app's windows), right-click for
-            per-window switching, New Window and Quit.
+            one tile per open window (three terminals = three tiles, each
+            labelled with its window title); click to switch, right-click
+            for Close Window, New Window and Quit.
 
 Scrolling over the compact pill switches to the next/previous app.  Like the
 dock, the window is fixed-size and transparent with the input region limited
@@ -57,6 +58,14 @@ def island_width(n_apps: int) -> int:
     return max(COMPACT_W + 60, min(max(n_apps, 1), PER_ROW) * TILE_W + 36)
 
 
+def island_header(apps: list[RunningApp]) -> str:
+    """'3 windows · 2 apps' (pure; unit-tested)."""
+    if not apps:
+        return "No apps running"
+    w, a = sum(len(x.windows) for x in apps), len(apps)
+    return f"{w} window{'s' if w != 1 else ''} · {a} app{'s' if a != 1 else ''}"
+
+
 def reserve_thickness(panel_h: int) -> int:
     """Top strut, measured from the monitor top, that keeps windows below the pill."""
     return panel_h + TOP_GAP + COMPACT_H + TOP_GAP
@@ -87,23 +96,27 @@ class IslandPill(Gtk.Box):
 
 
 class IslandTile(Gtk.Box):
-    def __init__(self, island: "DynamicIsland", app: RunningApp):
+    """One open window: app icon, the window's own title underneath."""
+
+    def __init__(self, island: "DynamicIsland", app: RunningApp, xid: int, title: str, active: bool):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         self.island = island
         self.running = app
+        self.xid = xid
+        self.title = title or app.name
         self.add_css_class("nova-island-tile")
-        if app.active:
+        if active:
             self.add_css_class("active")
         self.set_size_request(TILE_W - 8, -1)
+        self.set_valign(Gtk.Align.START)
 
-        icon = Gtk.Overlay(halign=Gtk.Align.CENTER)
-        icon.set_child(_app_image(app, 46))
-        if len(app.windows) > 1:
-            badge = Gtk.Label(label=str(len(app.windows)), halign=Gtk.Align.END, valign=Gtk.Align.START)
-            badge.add_css_class("nova-island-badge")
-            icon.add_overlay(badge)
-        self.append(icon)
-        name = Gtk.Label(label=app.name, max_width_chars=10, ellipsize=Pango.EllipsizeMode.END)
+        img = _app_image(app, 46)
+        img.set_halign(Gtk.Align.CENTER)
+        self.append(img)
+        # Two short lines, so windows of the same app (three terminals) differ.
+        name = Gtk.Label(label=self.title, max_width_chars=11, lines=2, wrap=True,
+                         wrap_mode=Pango.WrapMode.WORD_CHAR, ellipsize=Pango.EllipsizeMode.END,
+                         justify=Gtk.Justification.CENTER)
         name.add_css_class("nova-island-tile-name")
         self.append(name)
         dot = Gtk.Box(halign=Gtk.Align.CENTER)
@@ -114,15 +127,15 @@ class IslandTile(Gtk.Box):
         click.connect("released", self._on_click)
         self.add_controller(click)
         motion = Gtk.EventControllerMotion()
-        motion.connect("enter", lambda *_: island.show_detail(app))
+        motion.connect("enter", lambda *_: island.show_detail(app, self.title))
         self.add_controller(motion)
 
     def _on_click(self, gesture, _n, _x, _y) -> None:
         button = gesture.get_current_button()
         if button == Gdk.BUTTON_SECONDARY:
-            self.island.show_menu(self, self.running)
+            self.island.show_menu(self, self.running, self.xid)
         elif button == Gdk.BUTTON_PRIMARY:
-            self.island.switch_to(self.running, gesture.get_current_event_time())
+            self.island.focus_window(self.xid, gesture.get_current_event_time())
 
 
 def _app_image(app: RunningApp, size: int) -> Gtk.Image:
@@ -308,22 +321,24 @@ class DynamicIsland(Gtk.Window):
         self.compact.append(peek)
 
     def _fill_expanded(self) -> None:
-        n = len(self.apps)
-        self.header_label.set_text(f"{n} app{'s' if n != 1 else ''} running" if n else "No apps running")
+        self.header_label.set_text(island_header(self.apps))
         self.flow.remove_all()
+        active = self.app.windows.active
+        n = 0
         for a in self.apps:
-            self.flow.append(IslandTile(self, a))
+            for xid, title in zip(a.windows, a.titles):
+                self.flow.append(IslandTile(self, a, xid, title, xid == active))
+                n += 1
         self.flow.set_min_children_per_line(min(max(n, 1), PER_ROW))
         self.expanded.set_size_request(island_width(n), -1)
-        self.show_detail(self.apps[0] if self.apps else None)
+        front = self.apps[0] if self.apps else None
+        self.show_detail(front, front.titles[0] if front else "")
 
-    def show_detail(self, app: RunningApp | None) -> None:
+    def show_detail(self, app: RunningApp | None, title: str = "") -> None:
         if app is None:
             self.detail.set_text("Open an app and it shows up here")
             return
-        title = next((t for t in app.titles if t), "")
-        extra = f"  ·  {len(app.windows)} windows" if len(app.windows) > 1 else ""
-        self.detail.set_text(f"{app.name}{' — ' + title if title and title != app.name else ''}{extra}")
+        self.detail.set_text(f"{app.name} — {title}" if title and title != app.name else app.name)
 
     # -- states ------------------------------------------------------------------------
     def _set_page(self, page: str) -> None:
@@ -414,11 +429,13 @@ class DynamicIsland(Gtk.Window):
         if self.state == "expanded":
             self.collapse()
 
-    def show_menu(self, tile: Gtk.Widget, app: RunningApp) -> None:
-        entries: list = []
-        for xid, title in zip(app.windows, app.titles):
-            entries.append((_short(title or app.name), lambda w=xid: x11.activate(w, 0)))
-        entries.append(None)
+    def focus_window(self, xid: int, time: int) -> None:
+        x11.activate(xid, time)
+        if self.state == "expanded":
+            self.collapse()
+
+    def show_menu(self, tile: Gtk.Widget, app: RunningApp, xid: int) -> None:
+        entries: list = [("Close Window", lambda: x11.close_window(xid))]
         if app.record is not None:
             entries.append(("New Window", lambda: self.app.launch_app(app.record)))
         n = len(app.windows)
@@ -466,6 +483,3 @@ def _clear(box: Gtk.Box) -> None:
     while (child := box.get_first_child()) is not None:
         box.remove(child)
 
-
-def _short(title: str, n: int = 48) -> str:
-    return title if len(title) <= n else title[: n - 1] + "…"

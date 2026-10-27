@@ -180,6 +180,7 @@ def test_dynamic_island_states_and_switching(app, monkeypatch):
     isl._on_windows_changed()
     assert isl.state == "idle"
     app.windows.apps = fake
+    app.windows.active = 11
     isl._on_windows_changed()
     assert isl.state == "compact"  # animations off: no "opened" toast
     isl.expand()
@@ -189,9 +190,10 @@ def test_dynamic_island_states_and_switching(app, monkeypatch):
     while child is not None:
         tiles.append(child.get_child())
         child = child.get_next_sibling()
-    assert [t.running.name for t in tiles] == ["Alpha", "Beta"]
-    assert "2 windows" in isl.detail.get_text()
-    isl.switch_to(tiles[0].running, 0)  # focused app: cycles to its next window
+    # One tile per window, each labelled with its own title.
+    assert [(t.xid, t.title) for t in tiles] == [(11, "Doc 1"), (12, "Doc 2"), (21, "Beta")]
+    assert isl.header_label.get_text() == "3 windows · 2 apps"
+    tiles[1].island.focus_window(tiles[1].xid, 0)
     assert activated == [12] and isl.state == "compact"
     isl._on_scroll(None, 0, 1)  # scroll down: next app
     assert activated[-1] == 21

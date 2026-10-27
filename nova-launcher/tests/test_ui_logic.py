@@ -8,7 +8,7 @@ from nova_launcher.system.monitor_support import MonitorInfo, Rect, centered, ch
 from nova_launcher.core.running_apps import WindowInfo, group_windows, next_window
 from nova_launcher.system.x11 import strut_values
 from nova_launcher.ui.dock import magnify
-from nova_launcher.ui.dynamic_island import island_width, reserve_thickness
+from nova_launcher.ui.dynamic_island import island_header, island_width, reserve_thickness
 from nova_launcher.ui.grid_model import GridModel
 from nova_launcher.ui.launcher_window import build_results
 
@@ -206,5 +206,8 @@ def test_island_geometry():
     assert island_width(6) == island_width(20)  # at most one row's width
     assert island_width(4) < island_width(6)
     assert reserve_thickness(32) > 32 + 36
+    from nova_launcher.core.running_apps import RunningApp
+    assert island_header([]) == "No apps running"
+    assert island_header([RunningApp("t", "Terminal", "", None, [1, 2, 3], ["a", "b", "c"])]) == "3 windows · 1 app"
     v = strut_values("top", 76, (1280, 0, 1920, 1080), (3200, 1191))
     assert v[2] == 76 and (v[8], v[9]) == (1280, 3199) and sum(v) == 76 + 1280 + 3199
