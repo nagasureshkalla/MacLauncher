@@ -210,7 +210,10 @@ class DynamicIsland(Gtk.Window):
                                            propagate_natural_height=True, max_content_height=MAX_ROWS * 108)
         self.scroller.set_child(self.flow)
         self.expanded.append(self.scroller)
-        self.detail = Gtk.Label(xalign=0.5, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=60)
+        # max_width_chars=1: the title line must never widen the pill (it would
+        # resize on every hover, slip out from under the pointer and flicker);
+        # it just fills the width the tiles give it and ellipsizes.
+        self.detail = Gtk.Label(xalign=0.5, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=1)
         self.detail.add_css_class("nova-island-detail")
         self.expanded.append(self.detail)
         self.stack.add_named(self.expanded, "expanded")
@@ -336,9 +339,12 @@ class DynamicIsland(Gtk.Window):
 
     def show_detail(self, app: RunningApp | None, title: str = "") -> None:
         if app is None:
-            self.detail.set_text("Open an app and it shows up here")
-            return
-        self.detail.set_text(f"{app.name} — {title}" if title and title != app.name else app.name)
+            text = "Open an app and it shows up here"
+        else:
+            text = f"{app.name} — {title}" if title and title != app.name else app.name
+        if self.detail.get_text() != text:
+            self.detail.set_text(text)
+            self.detail.set_tooltip_text(text)
 
     # -- states ------------------------------------------------------------------------
     def _set_page(self, page: str) -> None:

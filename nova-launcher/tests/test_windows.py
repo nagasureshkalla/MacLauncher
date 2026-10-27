@@ -21,6 +21,8 @@ def app(tmp_path, monkeypatch):
     for n in ("Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"):
         write_desktop(apps, f"{n.lower()}.desktop", app_entry(n, "true"))
     monkeypatch.setenv("XDG_DATA_DIRS", str(tmp_path / "nosys"))
+    # Hiding system apps must not hide GSettings schemas (GLib aborts without them).
+    monkeypatch.setenv("GSETTINGS_SCHEMA_DIR", "/usr/share/glib-2.0/schemas")
 
     import nova_launcher.application as appmod
     from gi.repository import Gio
@@ -185,6 +187,15 @@ def test_dynamic_island_states_and_switching(app, monkeypatch):
     assert isl.state == "compact"  # animations off: no "opened" toast
     isl.expand()
     assert isl.state == "expanded"
+    # Hovering tiles with short vs long titles must not resize the pill
+    # (it used to, which made it flicker while moving between tiles).
+    from gi.repository import Gtk
+
+    widths = set()
+    for t in ("x", "a very long window title " * 6):
+        isl.show_detail(fake[0], t)
+        widths.add(isl.pill.measure(Gtk.Orientation.HORIZONTAL, -1)[1])
+    assert len(widths) == 1
     tiles = []
     child = isl.flow.get_first_child()
     while child is not None:
