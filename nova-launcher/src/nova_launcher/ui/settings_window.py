@@ -133,6 +133,8 @@ class SettingsWindow(Adw.PreferencesWindow):
         self._combo(g, "dock_monitor", "Monitor",
                     [("primary", "Primary monitor")] + [(m.connector, m.connector) for m in mons])
         self._switch(g, "dock_autohide", "Automatically hide", "Reveal by moving the pointer to the screen edge")
+        self._switch(g, "dock_reserve_space", "Reserve screen space",
+                     "Maximized windows stop above the dock (when not auto-hiding)")
         page.add(g)
         g = Adw.PreferencesGroup(title="Size")
         self._spin(g, "dock_icon_size", "Icon size", step=4)

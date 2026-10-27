@@ -69,6 +69,7 @@ SCHEMA: dict[str, Option] = {
     "dock_magnification": Option(1.6, float, min=1.0, max=2.5),
     "dock_spacing": Option(6, int, min=0, max=24),
     "dock_autohide": Option(False, bool),
+    "dock_reserve_space": Option(True, bool, description="Maximized windows stop above the dock"),
     "dock_show_running": Option(True, bool),
     "dock_show_recent": Option(True, bool),
     "dock_recent_count": Option(3, int, min=0, max=8),

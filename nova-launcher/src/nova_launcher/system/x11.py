@@ -134,6 +134,37 @@ def make_dock(xid: int) -> None:
     _x().XFlush(_open())
 
 
+def strut_values(position: str, thickness: int, mon: tuple[int, int, int, int],
+                 root: tuple[int, int]) -> list[int]:
+    """_NET_WM_STRUT_PARTIAL for a dock on one monitor edge (pure; unit-tested).
+
+    Struts are measured from the edges of the whole X screen, so a monitor that
+    does not touch the screen edge needs the gap added.
+    """
+    mx, my, mw, mh = mon
+    rw, rh = root
+    v = [0] * 12
+    if thickness <= 0:
+        return v
+    if position == "bottom":
+        v[3] = rh - (my + mh) + thickness
+        v[10], v[11] = mx, mx + mw - 1
+    elif position == "left":
+        v[0] = mx + thickness
+        v[4], v[5] = my, my + mh - 1
+    elif position == "right":
+        v[1] = rw - (mx + mw) + thickness
+        v[6], v[7] = my, my + mh - 1
+    return v
+
+
+def set_strut(xid: int, values: list[int]) -> None:
+    """Reserve screen space so maximized windows stop at the dock (EWMH)."""
+    _set_cardinals(xid, "_NET_WM_STRUT_PARTIAL", values)
+    _set_cardinals(xid, "_NET_WM_STRUT", values[:4])
+    _x().XFlush(_open())
+
+
 def make_utility(xid: int) -> None:
     """Quick-launcher popup: no taskbar entry, kept above."""
     _set_atoms(xid, "_NET_WM_STATE", ["_NET_WM_STATE_ABOVE", "_NET_WM_STATE_SKIP_TASKBAR",

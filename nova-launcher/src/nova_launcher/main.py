@@ -11,6 +11,8 @@ import sys
 
 
 def _cli_tools(argv: list[str]) -> int | None:
+    if any(a in argv for a in ("--set-default", "--restore-default")):
+        return _default_launcher("--set-default" in argv)
     if not any(a in argv for a in ("--diagnose", "--repair", "--version")):
         return None
     p = argparse.ArgumentParser(prog="nova-launcher")
@@ -43,6 +45,40 @@ def _cli_tools(argv: list[str]) -> int | None:
             print(report)
     if args.repair:
         repair(repairs)
+    return 0
+
+
+def _default_launcher(enable: bool) -> int:
+    """Make Nova the default launcher (or undo it), then restart Nova."""
+    import subprocess
+
+    from . import APP_ID
+    from .config import Settings
+    from .system import desktop_integration as integ
+
+    # The running instance owns settings.json; stop it so it cannot overwrite our changes.
+    import time
+
+    def running() -> bool:
+        return subprocess.run(["gdbus", "call", "--session", "--dest", APP_ID, "--object-path", "/",
+                               "--method", "org.freedesktop.DBus.Peer.Ping"], capture_output=True).returncode == 0
+
+    if running():
+        subprocess.run(["gapplication", "action", APP_ID, "quit"], capture_output=True, timeout=10)
+        for _ in range(100):
+            if not running():
+                break
+            time.sleep(0.05)
+    settings = Settings().load()
+    lines = integ.set_as_default(settings) if enable else integ.restore_default(settings)
+    for line in lines:
+        print(" -", line)
+    if enable:
+        subprocess.Popen([sys.argv[0] if sys.argv[0].endswith("nova-launcher") else "nova-launcher", "--background"],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("Nova restarted. Undo everything with:  nova-launcher --restore-default")
+    else:
+        print("Nova stopped. Start it again any time with:  nova-launcher")
     return 0
 
 

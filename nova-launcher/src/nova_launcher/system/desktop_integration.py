@@ -28,7 +28,7 @@ AUTOSTART_ENTRY = """[Desktop Entry]
 Type=Application
 Name=Nova Launcher
 Comment=Start Nova Launcher in the background
-Exec=nova-launcher --background
+Exec={exe} --background
 Icon={app_id}
 X-GNOME-Autostart-enabled=true
 X-GNOME-Autostart-Delay=2
@@ -55,7 +55,9 @@ def autostart_enabled() -> bool:
 def set_autostart(enabled: bool) -> None:
     p = autostart_path()
     if enabled:
-        paths.atomic_write(p, AUTOSTART_ENTRY.format(app_id=APP_ID))
+        # Absolute path: ~/.local/bin is not guaranteed to be on PATH at login.
+        exe = shutil.which("nova-launcher") or "nova-launcher"
+        paths.atomic_write(p, AUTOSTART_ENTRY.format(app_id=APP_ID, exe=exe))
         log.info("autostart enabled: %s", p)
     elif p.exists():
         p.unlink()
@@ -127,6 +129,23 @@ def install_shortcut(name: str, accel: str, action: str) -> str:
     return f"{accel} -> {command}"
 
 
+def regrab_shortcuts(delay: float = 0.5) -> None:
+    """Make gsd-media-keys re-grab Nova's keys (clear and re-set each binding)."""
+    import time
+
+    rc, out = _gsettings("get", MEDIA_KEYS, "custom-keybindings")
+    for path in _parse_strv(out) if rc == 0 else []:
+        if "/nova-launcher-" not in path:
+            continue
+        schema = f"{CUSTOM_SCHEMA}:{path}"
+        rc, binding = _gsettings("get", schema, "binding")
+        binding = binding.strip().strip("'")
+        if rc == 0 and binding:
+            _gsettings("set", schema, "binding", "")
+            time.sleep(delay)
+            _gsettings("set", schema, "binding", binding)
+
+
 def remove_shortcuts() -> str:
     rc, out = _gsettings("get", MEDIA_KEYS, "custom-keybindings")
     if rc != 0:
@@ -138,3 +157,124 @@ def remove_shortcuts() -> str:
             _gsettings("reset", f"{CUSTOM_SCHEMA}:{p}", key)
     _gsettings("set", MEDIA_KEYS, "custom-keybindings", _strv([p for p in current if p not in ours]))
     return f"removed {len(ours)} Nova shortcut(s)"
+
+
+# -- "make Nova the default launcher" ---------------------------------------------
+SHELL_KEYS = "org.gnome.shell.keybindings"
+WM_KEYS = "org.gnome.desktop.wm.keybindings"
+UBUNTU_DOCK = "ubuntu-dock@ubuntu.com"
+DEFAULT_QUICK = "<Super>space"
+DEFAULT_GRID = "<Super>a"
+
+
+def backup_path() -> Path:
+    return paths.state_dir() / "gnome-defaults-backup.json"
+
+
+def _run(cmd: list[str]) -> tuple[int, str]:
+    if not shutil.which(cmd[0]):
+        return 127, f"{cmd[0]} not installed"
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+
+def _extension_enabled(uuid: str) -> bool:
+    rc, out = _run(["gnome-extensions", "list", "--enabled"])
+    return rc == 0 and uuid in out.split()
+
+
+def _without(values: list[str], accel: str) -> list[str]:
+    return [v for v in values if v.lower() != accel.lower()]
+
+
+def set_as_default(settings) -> list[str]:
+    """Make Nova the launcher: Super+A grid, Super+Space search, dock, autostart.
+
+    Every original value is saved to a backup file first (kept from the very
+    first run, so repeating this never loses the real originals);
+    ``restore_default()`` puts everything back.
+    """
+    import json
+
+    log_lines: list[str] = []
+    bp = backup_path()
+    if not bp.exists():
+        backup = {
+            "toggle_application_view": _gsettings("get", SHELL_KEYS, "toggle-application-view")[1],
+            "switch_input_source": _gsettings("get", WM_KEYS, "switch-input-source")[1],
+            "switch_input_source_backward": _gsettings("get", WM_KEYS, "switch-input-source-backward")[1],
+            "ubuntu_dock_enabled": _extension_enabled(UBUNTU_DOCK),
+            "autostart": autostart_enabled(),
+            "nova": {k: settings[k] for k in ("shortcut_quick", "shortcut_grid", "dock_enabled",
+                                              "dock_autohide", "dock_reserve_space")},
+        }
+        paths.atomic_write(bp, json.dumps(backup, indent=2))
+        log_lines.append(f"saved original GNOME values to {bp}")
+
+    # 1. Free Super+A from GNOME's app grid and Super+Space from layout switching.
+    _, cur = _gsettings("get", SHELL_KEYS, "toggle-application-view")
+    _gsettings("set", SHELL_KEYS, "toggle-application-view", _strv(_without(_parse_strv(cur), DEFAULT_GRID)))
+    for key in ("switch-input-source", "switch-input-source-backward"):
+        _, cur = _gsettings("get", WM_KEYS, key)
+        accel = DEFAULT_QUICK if key == "switch-input-source" else "<Shift><Super>space"
+        _gsettings("set", WM_KEYS, key, _strv(_without(_parse_strv(cur), accel)))
+    log_lines.append("GNOME: Super+A no longer opens the stock app grid; Super+Space no longer switches layouts")
+    # GNOME Shell releases its key grabs asynchronously; if gsd-media-keys tries
+    # to grab before that, it logs "Failed to grab accelerator" and the
+    # shortcut silently does nothing.  Wait, and re-assert the bindings below.
+    import time
+
+    time.sleep(1.0)
+
+    # 2. Nova shortcuts.
+    settings.set("shortcut_grid", DEFAULT_GRID)
+    settings.set("shortcut_quick", DEFAULT_QUICK)
+    log_lines.append("shortcut " + install_shortcut("grid", DEFAULT_GRID, "toggle-grid"))
+    log_lines.append("shortcut " + install_shortcut("quick", DEFAULT_QUICK, "toggle-quick"))
+    regrab_shortcuts()
+
+    # 3. Nova's dock replaces Ubuntu Dock, reserving space like Ubuntu Dock did.
+    settings.set("dock_enabled", True)
+    settings.set("dock_autohide", False)
+    settings.set("dock_reserve_space", True)
+    if _extension_enabled(UBUNTU_DOCK):
+        rc, out = _run(["gnome-extensions", "disable", UBUNTU_DOCK])
+        log_lines.append("Ubuntu Dock disabled" if rc == 0 else f"could not disable Ubuntu Dock: {out}")
+
+    # 4. Start at login.
+    set_autostart(True)
+    log_lines.append(f"autostart enabled ({autostart_path()})")
+    return log_lines
+
+
+def restore_default(settings) -> list[str]:
+    """Undo ``set_as_default`` using the saved backup."""
+    import json
+
+    bp = backup_path()
+    try:
+        backup = json.loads(bp.read_text())
+    except (OSError, ValueError):
+        return [f"no backup found at {bp}; nothing to restore"]
+    out = [remove_shortcuts()]
+    for key, schema, bkey in (("toggle-application-view", SHELL_KEYS, "toggle_application_view"),
+                              ("switch-input-source", WM_KEYS, "switch_input_source"),
+                              ("switch-input-source-backward", WM_KEYS, "switch_input_source_backward")):
+        val = backup.get(bkey, "")
+        rc, msg = _gsettings("set", schema, key, val) if val else _gsettings("reset", schema, key)
+        if rc != 0:
+            _gsettings("reset", schema, key)
+    out.append("GNOME keybindings restored (Super+A app grid, Super+Space input switching)")
+    if backup.get("ubuntu_dock_enabled") and not _extension_enabled(UBUNTU_DOCK):
+        rc, msg = _run(["gnome-extensions", "enable", UBUNTU_DOCK])
+        out.append("Ubuntu Dock re-enabled" if rc == 0 else f"could not re-enable Ubuntu Dock: {msg}")
+    set_autostart(bool(backup.get("autostart")))
+    out.append(f"autostart {'kept' if backup.get('autostart') else 'disabled'}")
+    for k, v in (backup.get("nova") or {}).items():
+        try:
+            settings.set(k, v)
+        except (KeyError, ValueError):
+            pass
+    bp.unlink()
+    out.append("backup consumed; GNOME is back to how it was")
+    return out

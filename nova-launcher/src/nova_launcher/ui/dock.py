@@ -224,11 +224,20 @@ class DockWindow(Gtk.Window):
         if mon is None or not self._xid:
             return GLib.SOURCE_REMOVE
         w, h = self._size
-        # Auto-hide docks live on the screen edge; fixed docks respect panels
-        # (top bar, Ubuntu Dock) through the monitor work area.
-        area = mon.geometry if self.app.settings["dock_autohide"] else mon.workarea
+        s = self.app.settings
+        reserve = s["dock_reserve_space"] and not s["dock_autohide"]
+        # Auto-hide and space-reserving docks sit on the screen edge (the work
+        # area would already exclude our own strut).  Otherwise respect other
+        # panels such as Ubuntu Dock through the monitor work area.
+        area = mon.geometry if (s["dock_autohide"] or reserve) else mon.workarea
         x, y = dock_origin(self.position, area, w, h)
         x11.move(self._xid, x, y)
+        thickness = self.base + 2 * BAR_PAD + EDGE_MARGIN + 6 if reserve else 0
+        mons = self.app.all_monitor_infos()
+        root = (max(m.geometry.x + m.geometry.width for m in mons),
+                max(m.geometry.y + m.geometry.height for m in mons)) if mons else (0, 0)
+        g = mon.geometry
+        x11.set_strut(self._xid, x11.strut_values(self.position, thickness, (g.x, g.y, g.width, g.height), root))
         self._update_input_region()
         return GLib.SOURCE_REMOVE
 
@@ -460,7 +469,9 @@ class DockWindow(Gtk.Window):
 
     def show_dock(self) -> None:
         self.rebuild()
-        self.present()
+        # Map without requesting focus: a dock must never steal the keyboard.
+        self.set_focusable(False)
+        self.set_visible(True)
         self.reveal(True)
         if self.app.settings["dock_autohide"]:
             self._schedule_hide()

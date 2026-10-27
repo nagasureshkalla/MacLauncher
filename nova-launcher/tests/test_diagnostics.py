@@ -84,6 +84,6 @@ def test_autostart_toggle(tmp_path):
     assert not integ.autostart_enabled()
     integ.set_autostart(True)
     text = integ.autostart_path().read_text()
-    assert "Exec=nova-launcher --background" in text and str(tmp_path) in str(integ.autostart_path())
+    assert "nova-launcher --background" in text and str(tmp_path) in str(integ.autostart_path())
     integ.set_autostart(False)
     assert not integ.autostart_enabled()

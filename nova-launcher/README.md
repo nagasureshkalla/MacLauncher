@@ -79,7 +79,32 @@ Then, optionally, in **Nova Settings → General** (each is opt-in and reversibl
 The shortcut command is `gapplication action io.github.nova.Launcher toggle-quick`,
 a small C program, so a key press never waits for Python to start.
 
+## Make Nova the default launcher
+
+```bash
+nova-launcher --set-default       # apply
+nova-launcher --restore-default   # undo, exactly
+```
+
+`--set-default` first saves every value it will change to
+`~/.local/state/nova-launcher/gnome-defaults-backup.json` (kept from the first
+run, so repeating it never loses the originals), then:
+
+| Change | Before | After |
+|---|---|---|
+| **Super+A** | GNOME app grid | Nova Launchpad |
+| **Super+Space** | switch keyboard layout (does nothing with one layout) | Nova quick search |
+| Dock | Ubuntu Dock | Nova dock, reserving screen space like Ubuntu Dock |
+| Login | — | Nova starts in the background |
+
+Super alone still opens the GNOME Activities overview, and nothing else in
+GNOME is modified. `--restore-default` puts back the saved keybindings,
+re-enables Ubuntu Dock, restores the autostart state and Nova's previous
+settings, then deletes the backup.
+
 ## Uninstall
+
+Run `nova-launcher --restore-default` first if you made Nova the default.
 
 ```bash
 scripts/uninstall.sh           # per-user install; keeps your settings

@@ -264,6 +264,9 @@ class NovaApplication(Adw.Application):
     def target_monitor_info(self, preference: str = "primary"):
         return monitor_support.choose_monitor(preference, monitor_support.list_monitors())
 
+    def all_monitor_infos(self):
+        return monitor_support.list_monitors()
+
     def target_monitor(self):
         info = self.target_monitor_info()
         return monitor_support.gdk_monitor_for(info) if info else None
