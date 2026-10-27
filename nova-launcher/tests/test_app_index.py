@@ -139,3 +139,20 @@ def test_usage_history_disabled_and_corrupt(tmp_path):
     u.load()
     u.record("x.desktop")
     assert u.recent(5) == []
+
+
+def test_chrome_window_is_not_claimed_by_a_chrome_web_app(tmp_path):
+    """Web apps (Claude etc.) run google-chrome too, but have their own crx_ class."""
+    idx, d = _index(tmp_path)
+    write_desktop(d, "chrome-abc-Default.desktop",
+                  app_entry("Claude", "google-chrome --profile-directory=Default --app-id=abc",
+                            extra="StartupWMClass=crx_abc\n"))
+    write_desktop(d, "google-chrome.desktop", app_entry("Google Chrome", "/usr/bin/google-chrome-stable %U"))
+    write_desktop(d, "xterm.desktop", app_entry("XTerm", "xterm"))
+    assert idx.refresh_sync()
+    assert idx.get("chrome-abc-Default.desktop").executable == "google-chrome"
+    assert idx.find_by_wm_class("Google-chrome").name == "Google Chrome"  # Chrome's real WM_CLASS
+    assert idx.find_by_wm_class("google-chrome").name == "Google Chrome"
+    assert idx.find_by_wm_class("crx_abc").name == "Claude"
+    assert idx.find_by_wm_class("XTerm").name == "XTerm"  # executable match still works
+    assert idx.find_by_wm_class("") is None

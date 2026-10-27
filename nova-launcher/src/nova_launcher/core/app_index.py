@@ -130,12 +130,25 @@ class AppIndex:
         return [r for _, r in self.engine.search(query, limit)]
 
     def find_by_wm_class(self, wm_class: str) -> AppRecord | None:
+        """App for a window class: StartupWMClass, then desktop ID, then executable.
+
+        Entries that declare their own StartupWMClass are never matched by
+        executable: Chrome/Edge web apps (Claude, YouTube, ...) all run
+        ``google-chrome`` but have their own ``crx_*`` class, and must not
+        claim plain Chrome windows.
+        """
         wc = wm_class.casefold()
-        for r in self._records.values():
+        if not wc:
+            return None
+        records = self._records.values()
+        for r in records:
             if r.startup_wm_class and r.startup_wm_class.casefold() == wc:
                 return r
-        for r in self._records.values():
-            if r.id.removesuffix(".desktop").casefold() == wc or r.executable.casefold() == wc:
+        for r in records:
+            if r.id.removesuffix(".desktop").casefold() == wc:
+                return r
+        for r in records:
+            if not r.startup_wm_class and r.executable.casefold() == wc:
                 return r
         return None
 
