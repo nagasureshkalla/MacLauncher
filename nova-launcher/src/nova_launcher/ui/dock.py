@@ -26,6 +26,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from ..core.desktop_entry import AppRecord  # noqa: E402
+from ..core.running_apps import next_window  # noqa: E402
 from ..system import x11  # noqa: E402
 from ..system.monitor_support import dock_origin  # noqa: E402
 from .glass import GlassBox  # noqa: E402
@@ -154,8 +155,7 @@ class DockWindow(Gtk.Window):
         self.hidden = False
         self._tick = 0
         self._hide_timer = 0
-        self._win_refresh = 0
-        self._x11_watch = 0
+        self._tracking = False
         self._trash_full = False
         self._xid = 0
         self._size = (1, 1)
@@ -227,8 +227,9 @@ class DockWindow(Gtk.Window):
         self._xid = self.app.xid_of(self)
         if self._xid:
             x11.make_dock(self._xid)
-            if not self._x11_watch:
-                self._x11_watch = x11.watch_root(self._schedule_window_refresh)
+            if not self._tracking:
+                self.app.windows.connect(self._on_windows_changed)
+                self._tracking = True
 
     def _place(self) -> bool:
         mon = self.app.target_monitor_info(self.app.settings["dock_monitor"])
@@ -487,30 +488,11 @@ class DockWindow(Gtk.Window):
         self.reveal(True)
         if self.app.settings["dock_autohide"]:
             self._schedule_hide()
-        self._schedule_window_refresh()
+        self.app.windows.schedule_refresh()
 
     # -- running windows -----------------------------------------------------------------
-    def _schedule_window_refresh(self) -> None:
-        if not self._win_refresh:
-            self._win_refresh = GLib.timeout_add(120, self._refresh_windows)
-
-    def _refresh_windows(self) -> bool:
-        self._win_refresh = 0
-        running: dict[str, list[int]] = {}
-        own = {self._xid}
-        try:
-            for xid in x11.client_windows():
-                if xid in own or not x11.window_type_is_normal(xid):
-                    continue
-                inst, cls = x11.wm_class(xid)
-                rec = self.app.index.find_by_wm_class(cls) or self.app.index.find_by_wm_class(inst)
-                if rec is not None:
-                    running.setdefault(rec.id, []).append(xid)
-        except Exception:
-            log.exception("window list refresh failed")
-            return GLib.SOURCE_REMOVE
-        own_id = self.app.self_desktop_id()
-        running.pop(own_id, None)
+    def _on_windows_changed(self) -> None:
+        running = self.app.windows.running_ids()
         changed_set = set(running) != set(self.running)
         self.running = running
         if changed_set and self.app.settings["dock_show_running"]:
@@ -518,7 +500,6 @@ class DockWindow(Gtk.Window):
         else:
             for item in self.items:
                 item.set_running(item.slot.record is not None and item.slot.record.id in running)
-        return GLib.SOURCE_REMOVE
 
     # -- actions ---------------------------------------------------------------------
     def activate(self, item: DockItem, new_instance: bool = False, time: int = 0) -> None:
@@ -533,10 +514,7 @@ class DockWindow(Gtk.Window):
             return
         windows = self.running.get(record.id, [])
         if windows and not new_instance:
-            active = x11.active_window()
-            # Cycle through the app's windows when it is already focused.
-            target = windows[(windows.index(active) + 1) % len(windows)] if active in windows else windows[-1]
-            x11.activate(target, time)
+            x11.activate(next_window(windows, x11.active_window()), time)
             return
         res = self.app.launch_app(record, source=self)
         if res.ok:

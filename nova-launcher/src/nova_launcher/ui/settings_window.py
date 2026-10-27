@@ -72,6 +72,15 @@ class SettingsWindow(Adw.PreferencesWindow):
                     "Reduced motion replaces bounces and zooms with fades")
         page.add(g)
 
+        g = Adw.PreferencesGroup(title="Dynamic Island",
+                                 description="A pill at the top of the screen showing your running apps. "
+                                             "Hover or click it to see them all and switch; scroll over it "
+                                             "to flip between apps.")
+        self._switch(g, "island_enabled", "Show Dynamic Island")
+        self._switch(g, "island_reserve_space", "Keep windows below it",
+                     "Maximized windows stop under the island instead of behind it")
+        page.add(g)
+
         g = Adw.PreferencesGroup(title="Commands widget",
                                  description="A small panel on the desktop listing every Nova command, "
                                              "starting with All Applications. Stays below your windows.")

@@ -29,6 +29,7 @@ from .config import Settings  # noqa: E402
 from .core import app_launcher  # noqa: E402
 from .core.app_index import AppIndex, UsageHistory  # noqa: E402
 from .core.desktop_entry import AppRecord  # noqa: E402
+from .core.running_apps import WindowTracker  # noqa: E402
 from .core.file_manager import FileManager, Place, mounted_places, standard_places  # noqa: E402
 from .logging_config import set_debug, setup_logging  # noqa: E402
 from .system import monitor_support, x11  # noqa: E402
@@ -46,6 +47,8 @@ class NovaApplication(Adw.Application):
         self.grid = None
         self.dock = None
         self.widget = None
+        self.island = None
+        self.windows = None
         self.settings_window = None
         self.files: FileManager | None = None
         self._bench_file = os.environ.get("NOVA_BENCH_FILE")
@@ -88,6 +91,7 @@ class NovaApplication(Adw.Application):
         self.index.refresh_async(self._on_first_scan)
         self.index.watch()
         self.files = FileManager(self.settings["file_manager_timeout_ms"], on_slow=self._on_files_slow)
+        self.windows = WindowTracker(self)
         self.settings.connect(self._on_setting)
 
         self._install_actions()
@@ -113,7 +117,7 @@ class NovaApplication(Adw.Application):
         # Runs after command-line handling (so --no-dock is respected) and also
         # covers D-Bus activation, which has no command line at all.
         GLib.idle_add(lambda: (self.update_dock_visibility(), self.update_widget_visibility(),
-                               GLib.SOURCE_REMOVE)[2])
+                               self.update_island_visibility(), GLib.SOURCE_REMOVE)[3])
         if self.dock_supported() and not x11.watch_super_tap(self._on_windows_key):
             log.warning("Windows-key tap detection unavailable")
         log.info("startup done in %.0f ms (apps from cache: %s)",
@@ -166,7 +170,7 @@ class NovaApplication(Adw.Application):
         log.info("quitting")
         if self.index:
             self.index.unwatch()
-        for w in (self.quick, self.grid, self.dock, self.widget, self.settings_window):
+        for w in (self.quick, self.grid, self.dock, self.widget, self.island, self.settings_window):
             if w is not None:
                 w.destroy()
         if self._held:
@@ -217,6 +221,8 @@ class NovaApplication(Adw.Application):
             self._on_wallpaper_ready()
         elif key == "widget_enabled":
             self.update_widget_visibility()
+        elif key == "island_enabled":
+            self.update_island_visibility()
         elif key == "windows_key_action":
             from .system import desktop_integration
 
@@ -232,7 +238,7 @@ class NovaApplication(Adw.Application):
             self._apply_icon_theme()
         dark = sm.get_dark()
         level = self.settings["animation_level"]
-        for w in (self.quick, self.grid, self.dock, self.widget, self.settings_window):
+        for w in (self.quick, self.grid, self.dock, self.widget, self.island, self.settings_window):
             if w is None:
                 continue
             w.add_css_class("nova-launcher")
@@ -294,6 +300,20 @@ class NovaApplication(Adw.Application):
                 self.widget.show_widget()
             elif not want and self.widget.get_visible():
                 self.widget.set_visible(False)
+
+    def update_island_visibility(self) -> None:
+        # Needs X11 for the window list and to stay on top (same as the dock).
+        want = self.settings["island_enabled"] and self.dock_supported()
+        if want and self.island is None:
+            from .ui.dynamic_island import DynamicIsland
+
+            self.island = DynamicIsland(self)
+            self._apply_theme()
+        if self.island is not None:
+            if want and not self.island.get_visible():
+                self.island.show_island()
+            elif not want and self.island.get_visible():
+                self.island.set_visible(False)
 
     def show_settings(self) -> None:
         if self.settings_window is None:
@@ -389,7 +409,7 @@ class NovaApplication(Adw.Application):
             gs.set_property("gtk-icon-theme-name", name)
             widgets.gicon_for.cache_clear()
             widgets.record_gicon.cache_clear()
-            for w in (self.grid, self.dock, self.widget):
+            for w in (self.grid, self.dock, self.widget, self.island):
                 if w is not None and hasattr(w, "mark_dirty"):
                     w.mark_dirty()
                 elif w is not None and hasattr(w, "rebuild"):

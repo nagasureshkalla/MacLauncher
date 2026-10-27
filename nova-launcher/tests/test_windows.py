@@ -33,6 +33,8 @@ def app(tmp_path, monkeypatch):
 
     a = TestApp()
     a.settings.set("dock_enabled", False)
+    a.settings.set("island_enabled", False)
+    a.settings.set("island_reserve_space", False)  # never shrink the real work area
     a.settings.set("grid_columns", 3)
     a.settings.set("grid_rows", 2)
     # Animations advance only on painted frames, which stop while the screen
@@ -152,3 +154,46 @@ def test_commands_widget_runs_commands(app):
     assert not w.body.get_reveal_child()
     app.settings.set("widget_enabled", False)
     assert spin(lambda: not w.get_visible())
+
+
+def test_dynamic_island_states_and_switching(app, monkeypatch):
+    from nova_launcher.core.running_apps import RunningApp
+    from nova_launcher.system import x11
+
+    if not app.dock_supported():
+        pytest.skip("Dynamic Island needs X11")
+    assert spin(lambda: len(app.index) == 8)
+    app.settings.set("island_enabled", True)
+    app.update_island_visibility()
+    isl = app.island
+    assert spin(lambda: isl.get_visible())
+    alpha, beta = app.index.get("alpha.desktop"), app.index.get("beta.desktop")
+    # Fake window list (the real one belongs to the user's session).
+    fake = [RunningApp("alpha.desktop", "Alpha", alpha.icon, alpha, [11, 12], ["Doc 1", "Doc 2"], True),
+            RunningApp("beta.desktop", "Beta", beta.icon, beta, [21], ["Beta"])]
+    monkeypatch.setattr(app.windows, "refresh", lambda: None)
+    activated = []
+    monkeypatch.setattr(x11, "activate", lambda xid, t=0: activated.append(xid))
+    monkeypatch.setattr(x11, "active_window", lambda: 11)
+
+    app.windows.apps = []
+    isl._on_windows_changed()
+    assert isl.state == "idle"
+    app.windows.apps = fake
+    isl._on_windows_changed()
+    assert isl.state == "compact"  # animations off: no "opened" toast
+    isl.expand()
+    assert isl.state == "expanded"
+    tiles = []
+    child = isl.flow.get_first_child()
+    while child is not None:
+        tiles.append(child.get_child())
+        child = child.get_next_sibling()
+    assert [t.running.name for t in tiles] == ["Alpha", "Beta"]
+    assert "2 windows" in isl.detail.get_text()
+    isl.switch_to(tiles[0].running, 0)  # focused app: cycles to its next window
+    assert activated == [12] and isl.state == "compact"
+    isl._on_scroll(None, 0, 1)  # scroll down: next app
+    assert activated[-1] == 21
+    app.settings.set("island_enabled", False)
+    assert spin(lambda: not isl.get_visible())

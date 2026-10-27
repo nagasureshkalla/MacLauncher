@@ -146,7 +146,10 @@ def strut_values(position: str, thickness: int, mon: tuple[int, int, int, int],
     v = [0] * 12
     if thickness <= 0:
         return v
-    if position == "bottom":
+    if position == "top":
+        v[2] = my + thickness
+        v[8], v[9] = mx, mx + mw - 1
+    elif position == "bottom":
         v[3] = rh - (my + mh) + thickness
         v[10], v[11] = mx, mx + mw - 1
     elif position == "left":
@@ -249,6 +252,25 @@ def _ulongs(raw: bytes, n: int) -> list[int]:
 def client_windows() -> list[int]:
     r = _get_property(_root(), "_NET_CLIENT_LIST", XA_WINDOW)
     return _ulongs(r[2], r[1]) if r else []
+
+
+def stacking_windows() -> list[int]:
+    """Managed windows in stacking order, bottom-most first (EWMH)."""
+    r = _get_property(_root(), "_NET_CLIENT_LIST_STACKING", XA_WINDOW)
+    return _ulongs(r[2], r[1]) if r else client_windows()
+
+
+def window_title(xid: int) -> str:
+    for prop, kind in (("_NET_WM_NAME", atom("UTF8_STRING")), ("WM_NAME", 31)):  # 31 = XA_STRING
+        r = _get_property(xid, prop, kind)
+        if r and r[0] == 8 and r[1]:
+            return r[2].decode(errors="replace")
+    return ""
+
+
+def skips_taskbar(xid: int) -> bool:
+    r = _get_property(xid, "_NET_WM_STATE", XA_ATOM)
+    return bool(r) and atom("_NET_WM_STATE_SKIP_TASKBAR") in _ulongs(r[2], r[1])
 
 
 def active_window() -> int:

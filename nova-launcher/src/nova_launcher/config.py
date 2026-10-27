@@ -75,6 +75,10 @@ SCHEMA: dict[str, Option] = {
     "dock_recent_count": Option(3, int, min=0, max=8),
     "dock_monitor": Option("primary", str, description="'primary' or a connector name such as HDMI-0"),
     "pinned_apps": Option(list(DEFAULT_PINNED), list),
+    # Dynamic Island
+    "island_enabled": Option(True, bool, description="Running apps in a pill at the top of the screen"),
+    "island_reserve_space": Option(True, bool, description="Maximized windows stop below the island"),
+    "island_monitor": Option("primary", str),
     # Commands widget
     "widget_enabled": Option(True, bool, description="Show the commands widget on the desktop"),
     "widget_position": Option("top-right", str, choices=("top-right", "top-left", "bottom-right", "bottom-left")),

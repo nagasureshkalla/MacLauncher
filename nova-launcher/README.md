@@ -11,6 +11,10 @@ written in Python 3.12 with **GTK 4 + libadwaita** (no Electron, no web view).
 |---|---|---|
 | ![dock](docs/screenshots/dock.png) | ![settings](docs/screenshots/settings.png) | ![widget](docs/screenshots/commands-widget.png) |
 
+| Dynamic Island (compact) | Dynamic Island (hover) |
+|---|---|
+| ![island](docs/screenshots/island-compact.png) | ![island expanded](docs/screenshots/island-expanded.png) |
+
 **Look:** icons from the [WhiteSur icon theme](https://github.com/vinceliuice/WhiteSur-icon-theme)
 (GPL-3.0, installed separately per-user, used only inside Nova; the system
 icon theme is not changed), Ubuntu Sans type, Apple-blue accents and
@@ -40,6 +44,17 @@ they never capture other windows.
   middle-click for a new instance, right-click menu (desktop actions, Keep in
   Dock, Quit), drag-to-pin and reorder, launch bounce, trash, bottom/left/right,
   auto-hide, multi-monitor.
+* **Dynamic Island** (X11): a black pill at the top centre of the main
+  monitor, just under the GNOME top bar. Compact, it shows the focused app
+  and the icons of the next few running apps; when a new app starts it
+  briefly grows to say so. **Hover or click** to expand it into tiles of every
+  running app (most recently used first, a green dot on the focused one, a
+  badge with the window count) — click a tile to switch, click again to cycle
+  that app's windows, right-click to pick a specific window, open a New
+  Window or Quit. **Scroll** over the compact pill to flip between apps. By
+  default maximized windows stop below it (Settings → General → Dynamic
+  Island → *Keep windows below it*); it can be turned off there too. Uses the
+  same event-driven window list as the dock: no polling, zero idle CPU.
 * **Commands widget** (X11): a small panel in a screen corner listing every
   Nova command — **All Applications** first, then Quick Search, Files,
   Downloads, Show/Hide Dock, Settings, Diagnose, Repair, Quit — with their
@@ -195,6 +210,7 @@ hides. Rust would not move the measured numbers enough to justify it.
 | Window placement (centred quick launcher, grid on chosen monitor) | ✅ | compositor decides |
 | Floating dock | ✅ (`_NET_WM_WINDOW_TYPE_DOCK`) | ❌ GNOME has no layer-shell; would need a Shell extension |
 | Running-app indicators | ✅ | ❌ |
+| Dynamic Island | ✅ | ❌ (same reason as the dock) |
 | Global shortcuts | ✅ GNOME custom shortcut | ✅ GNOME custom shortcut |
 
 * No GNOME Shell source changes, no extension, no display-manager changes; the

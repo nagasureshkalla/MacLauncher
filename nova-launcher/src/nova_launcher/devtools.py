@@ -103,6 +103,15 @@ def screenshot_tour(app, out_dir: Path) -> None:
     step(350, lambda: app.quick.dismiss())
     if app.dock is not None:
         step(400, snap(app.dock, "dock.png"))
+    # The island shows the real running apps; render just the pill.
+    def island(fn):
+        return lambda: fn(app.island) if app.island is not None and app.island.get_visible() else None
+
+    step(300, island(lambda isl: isl.app.windows.refresh()))
+    step(500, island(lambda isl: render_to_png(isl.pill, out_dir / "island-compact.png")))
+    step(300, island(lambda isl: isl.expand()))
+    step(900, island(lambda isl: render_to_png(isl.pill, out_dir / "island-expanded.png")))
+    step(300, island(lambda isl: isl.collapse()))
     # Created lazily after startup, so look it up when the step runs.
     # Render the widget even if the user hid it, without touching their setting.
     temp = {}

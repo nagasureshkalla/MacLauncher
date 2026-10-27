@@ -5,7 +5,10 @@ from nova_launcher.core.app_index import AppIndex, UsageHistory
 from nova_launcher.core.desktop_entry import AppRecord
 from nova_launcher.core.file_manager import Place
 from nova_launcher.system.monitor_support import MonitorInfo, Rect, centered, choose_monitor, dock_origin
+from nova_launcher.core.running_apps import WindowInfo, group_windows, next_window
+from nova_launcher.system.x11 import strut_values
 from nova_launcher.ui.dock import magnify
+from nova_launcher.ui.dynamic_island import island_width, reserve_thickness
 from nova_launcher.ui.grid_model import GridModel
 from nova_launcher.ui.launcher_window import build_results
 
@@ -165,3 +168,43 @@ def test_blur_render_cover_crops_to_exact_size(tmp_path):
     # Zoom/cover crops the centre: both colours present, edges dominated by each.
     assert res.getpixel((5, 45))[0] > res.getpixel((5, 45))[2]
     assert res.getpixel((154, 45))[2] > res.getpixel((154, 45))[0]
+
+
+def _rec(app_id, name, wm=""):
+    return AppRecord(id=app_id, path=f"/x/{app_id}", name=name, startup_wm_class=wm)
+
+
+def test_running_apps_grouped_most_recent_first_with_focused_app_in_front():
+    recs = {"Firefox": _rec("firefox.desktop", "Firefox", "Firefox"),
+            "Code": _rec("code.desktop", "Code", "Code"),
+            "nova-launcher": _rec("io.github.nova.Launcher.desktop", "Nova", "nova-launcher")}
+    wins = [  # stacking order: bottom-most first
+        WindowInfo(1, "navigator", "Firefox", "Mail"),
+        WindowInfo(2, "code", "Code", "main.py"),
+        WindowInfo(3, "navigator", "Firefox", "Docs"),
+        WindowInfo(4, "nova-launcher", "nova-launcher", "Settings"),
+        WindowInfo(5, "xeyes", "XEyes", ""),
+    ]
+    apps = group_windows(wins, active=2, resolve=lambda c, i: recs.get(c),
+                         exclude={"io.github.nova.Launcher.desktop"})
+    assert [a.name for a in apps] == ["Code", "XEyes", "Firefox"]  # focused first, then most recent
+    assert apps[0].active
+    ff = apps[2]
+    assert ff.windows == [3, 1] and ff.titles == ["Docs", "Mail"]  # topmost window first
+    assert apps[1].record is None and apps[1].key == "wmclass:xeyes" and apps[1].icon == "xeyes"
+
+
+def test_next_window_cycles_only_when_app_is_focused():
+    assert next_window([3, 1], active=9) == 3  # not focused: most recent window
+    assert next_window([3, 1], active=3) == 1  # focused: cycle
+    assert next_window([3, 1], active=1) == 3
+    assert next_window([], active=1) == 0
+
+
+def test_island_geometry():
+    assert island_width(1) == island_width(0) >= 300
+    assert island_width(6) == island_width(20)  # at most one row's width
+    assert island_width(4) < island_width(6)
+    assert reserve_thickness(32) > 32 + 36
+    v = strut_values("top", 76, (1280, 0, 1920, 1080), (3200, 1191))
+    assert v[2] == 76 and (v[8], v[9]) == (1280, 3199) and sum(v) == 76 + 1280 + 3199
