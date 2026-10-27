@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -sP
+# Uses the distribution Python (python3-gi), never a virtualenv.
+import sys
+sys.path.insert(0, "@PYLIBDIR@")
+from nova_launcher.main import main
+sys.exit(main())

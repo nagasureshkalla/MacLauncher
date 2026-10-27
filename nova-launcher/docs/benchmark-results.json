@@ -1,0 +1,50 @@
+{
+  "machine": "nagasureshkalla-X570-GAMING-X",
+  "session": "x11",
+  "python": "3.12.3",
+  "date": "2026-10-26 22:34",
+  "cold_start_to_first_frame": {
+    "n": 6,
+    "median_ms": 567.5,
+    "p95_ms": 1193.6,
+    "min_ms": 379.7,
+    "max_ms": 1193.6
+  },
+  "warm_open_shortcut_to_first_frame": {
+    "n": 20,
+    "median_ms": 38.5,
+    "p95_ms": 149.9,
+    "min_ms": 26.3,
+    "max_ms": 221.9
+  },
+  "warm_open_in_process_present_to_frame": {
+    "n": 20,
+    "median_ms": 29.3,
+    "p95_ms": 141.6,
+    "min_ms": 17.7,
+    "max_ms": 181.2
+  },
+  "idle_hidden": {
+    "cpu_percent_over_10s": 0.0,
+    "rss_mb": 190.8
+  },
+  "discovery_scan": {
+    "ms": 31.9,
+    "desktop_files": 206,
+    "apps": 90
+  },
+  "search_latency": {
+    "n": 240,
+    "median_ms": 0.7,
+    "p95_ms": 1.4,
+    "min_ms": 0.3,
+    "max_ms": 1.5
+  },
+  "search_latency_1000_apps": {
+    "n": 12,
+    "median_ms": 7.6,
+    "p95_ms": 12.4,
+    "min_ms": 2.9,
+    "max_ms": 14.7
+  }
+}

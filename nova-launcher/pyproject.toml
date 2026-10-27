@@ -1,0 +1,31 @@
+[project]
+name = "nova-launcher"
+dynamic = ["version"]
+description = "Fast macOS-inspired application launcher for GNOME (GTK 4 / libadwaita)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# PyGObject comes from the distribution (python3-gi); it is not pip-installed.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+nova-launcher = "nova_launcher.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "nova_launcher.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nova_launcher = ["ui/styles.css", "resources/icons/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -45,23 +45,37 @@ def screenshot_tour(app, out_dir: Path) -> None:
         steps.append((delay_ms, fn))
 
     def snap(window, name):
-        return lambda: render_to_png(window, out_dir / name)
+        def go():
+            # Render after the next painted frame so layout changes are applied.
+            clock = window.get_frame_clock()
+            if clock is None:
+                render_to_png(window, out_dir / name)
+                return
+            h = [0]
+
+            def after(c):
+                c.disconnect(h[0])
+                GLib.idle_add(lambda: (render_to_png(window, out_dir / name), GLib.SOURCE_REMOVE)[1])
+
+            h[0] = clock.connect("after-paint", after)
+            window.queue_draw()
+        return go
 
     step(1500, lambda: app.grid.open())
     step(900, snap(app.grid, "launchpad-grid.png"))
-    step(10, lambda: app.grid.search.set_text("ter"))
+    step(350, lambda: app.grid.search.set_text("ter"))
     step(600, snap(app.grid, "launchpad-search.png"))
-    step(10, lambda: (app.grid.search.set_text(""), app.grid.dismiss()))
+    step(350, lambda: (app.grid.search.set_text(""), app.grid.dismiss()))
     step(500, lambda: app.quick.open())
     step(400, snap(app.quick, "quick-launcher-empty.png"))
-    step(10, lambda: app.quick.entry.set_text("fire"))
+    step(350, lambda: app.quick.entry.set_text("fire"))
     step(500, snap(app.quick, "quick-launcher-fire.png"))
-    step(10, lambda: app.quick.entry.set_text("down"))
+    step(350, lambda: app.quick.entry.set_text("down"))
     step(500, snap(app.quick, "quick-launcher-places.png"))
-    step(10, lambda: app.quick.dismiss())
+    step(350, lambda: app.quick.dismiss())
     if app.dock is not None:
         step(400, snap(app.dock, "dock.png"))
-    step(10, lambda: app.show_settings())
+    step(350, lambda: app.show_settings())
     step(900, lambda: snap(app.settings_window, "settings.png")())
     step(200, lambda: app.quit_app())
 

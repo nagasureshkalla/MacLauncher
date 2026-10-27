@@ -28,7 +28,10 @@ class LaunchResult:
 def _app_info_for(record: AppRecord) -> Gio.DesktopAppInfo | None:
     info = None
     if record.path and os.path.exists(record.path):
-        info = Gio.DesktopAppInfo.new_from_filename(record.path)
+        try:
+            info = Gio.DesktopAppInfo.new_from_filename(record.path)
+        except TypeError:  # PyGObject: C constructor returned NULL (binary gone)
+            return None
     if info is None:
         try:
             info = Gio.DesktopAppInfo.new(record.id)

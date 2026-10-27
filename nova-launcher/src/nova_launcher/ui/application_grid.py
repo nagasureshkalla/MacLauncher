@@ -19,6 +19,18 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("nova.grid")
 
+RELEASE_AFTER_S = 20
+
+
+def trim_heap() -> None:
+    """Return freed heap pages to the OS (glibc only; no-op elsewhere)."""
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
 
 class LaunchpadWindow(Gtk.Window):
     def __init__(self, app: "NovaApplication"):
@@ -32,6 +44,7 @@ class LaunchpadWindow(Gtk.Window):
         self.selected = -1
         self.open_folder_id: str | None = None
         self._closing = 0
+        self._release_timer = 0
         self._dirty = True
 
         overlay = Gtk.Overlay()
@@ -446,6 +459,9 @@ class LaunchpadWindow(Gtk.Window):
             self.open()
 
     def open(self) -> None:
+        if self._release_timer:
+            GLib.source_remove(self._release_timer)
+            self._release_timer = 0
         if self._closing:
             GLib.source_remove(self._closing)
             self._closing = 0
@@ -467,6 +483,18 @@ class LaunchpadWindow(Gtk.Window):
         # Next frame: trigger the CSS open transition.
         self.content.add_tick_callback(lambda *_: (self.content.add_css_class("shown"), GLib.SOURCE_REMOVE)[1])
 
+    def _release_gpu_memory(self) -> bool:
+        """Free the full-screen surface and renderer caches while hidden.
+
+        A 1920x1080 GL surface plus glyph/texture caches is ~50 MB of private
+        memory; re-creating it costs a few ms on the next open.
+        """
+        self._release_timer = 0
+        if not self.get_visible():
+            self.unrealize()
+            trim_heap()
+        return GLib.SOURCE_REMOVE
+
     def dismiss(self) -> None:
         if not self.get_visible() or self._closing:
             return
@@ -477,6 +505,8 @@ class LaunchpadWindow(Gtk.Window):
         def hide():
             self._closing = 0
             self.set_visible(False)
+            if not self._release_timer:
+                self._release_timer = GLib.timeout_add_seconds(RELEASE_AFTER_S, self._release_gpu_memory)
             return GLib.SOURCE_REMOVE
 
         if delay:

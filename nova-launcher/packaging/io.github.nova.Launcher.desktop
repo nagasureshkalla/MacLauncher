@@ -1,0 +1,29 @@
+[Desktop Entry]
+Type=Application
+Name=Nova Launcher
+GenericName=Application Launcher
+Comment=Fast macOS-inspired dock, Launchpad and quick search
+Exec=@BINDIR@/nova-launcher --grid
+Icon=io.github.nova.Launcher
+Terminal=false
+Categories=Utility;GTK;
+Keywords=launcher;launchpad;dock;spotlight;search;apps;
+StartupNotify=false
+DBusActivatable=true
+Actions=quick;settings;diagnose;quit;
+
+[Desktop Action quick]
+Name=Quick Search
+Exec=@BINDIR@/nova-launcher --quick
+
+[Desktop Action settings]
+Name=Settings
+Exec=@BINDIR@/nova-launcher --settings
+
+[Desktop Action diagnose]
+Name=Diagnose Slow Startup
+Exec=gapplication action io.github.nova.Launcher diagnose
+
+[Desktop Action quit]
+Name=Quit Nova
+Exec=@BINDIR@/nova-launcher --quit

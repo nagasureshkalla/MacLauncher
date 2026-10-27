@@ -114,6 +114,12 @@ def load_entry(path: str, desktop_id: str) -> tuple[AppRecord | None, str]:
         return None, f"not an application (Type={entry_type or 'missing'})"
 
     try:
+        has_exec = bool(kf.get_string(group, "Exec").strip())
+    except GLib.Error:
+        has_exec = False
+    if not has_exec and not _bool("DBusActivatable"):
+        return None, "unavailable: no Exec line"
+    try:
         info = Gio.DesktopAppInfo.new_from_keyfile(kf)
     except TypeError:  # PyGObject raises when the C constructor returns NULL
         info = None

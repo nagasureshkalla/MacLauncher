@@ -101,19 +101,28 @@ _err_handler = None
 
 def atom(name: str) -> int:
     if name not in _atoms:
-        dpy = _open()  # loads _lib on first use
-        _atoms[name] = _lib.XInternAtom(dpy, name.encode(), 0)
+        _atoms[name] = _x().XInternAtom(_open(), name.encode(), 0)
     return _atoms[name]
+
+
+def _x():
+    """libX11 handle; opens the display first so _lib is always loaded."""
+    _open()
+    return _lib
+
+
+def _root() -> int:
+    return _x().XDefaultRootWindow(_open())
 
 
 def _set_atoms(xid: int, prop: str, values: list[str]) -> None:
     arr = (ctypes.c_ulong * len(values))(*[atom(v) for v in values])
-    _lib.XChangeProperty(_open(), xid, atom(prop), XA_ATOM, 32, PropModeReplace, arr, len(values))
+    _x().XChangeProperty(_open(), xid, atom(prop), XA_ATOM, 32, PropModeReplace, arr, len(values))
 
 
 def _set_cardinals(xid: int, prop: str, values: list[int]) -> None:
     arr = (ctypes.c_ulong * len(values))(*values)
-    _lib.XChangeProperty(_open(), xid, atom(prop), XA_CARDINAL, 32, PropModeReplace, arr, len(values))
+    _x().XChangeProperty(_open(), xid, atom(prop), XA_CARDINAL, 32, PropModeReplace, arr, len(values))
 
 
 def make_dock(xid: int) -> None:
@@ -122,26 +131,26 @@ def make_dock(xid: int) -> None:
     _set_atoms(xid, "_NET_WM_STATE", ["_NET_WM_STATE_ABOVE", "_NET_WM_STATE_STICKY",
                                        "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER"])
     _set_cardinals(xid, "_NET_WM_DESKTOP", [0xFFFFFFFF])
-    _lib.XFlush(_open())
+    _x().XFlush(_open())
 
 
 def make_utility(xid: int) -> None:
     """Quick-launcher popup: no taskbar entry, kept above."""
     _set_atoms(xid, "_NET_WM_STATE", ["_NET_WM_STATE_ABOVE", "_NET_WM_STATE_SKIP_TASKBAR",
                                        "_NET_WM_STATE_SKIP_PAGER"])
-    _lib.XFlush(_open())
+    _x().XFlush(_open())
 
 
 def move(xid: int, x: int, y: int) -> None:
-    _lib.XMoveWindow(_open(), xid, int(x), int(y))
-    _lib.XFlush(_open())
+    _x().XMoveWindow(_open(), xid, int(x), int(y))
+    _x().XFlush(_open())
 
 
 def _get_property(xid: int, prop: str, req_type: int, max_len: int = 4096) -> tuple[int, int, bytes] | None:
     actual_type, fmt = Atom(), ctypes.c_int()
     nitems, after = ctypes.c_ulong(), ctypes.c_ulong()
     data = ctypes.c_void_p()
-    rc = _lib.XGetWindowProperty(_open(), xid, atom(prop), 0, max_len, 0, req_type,
+    rc = _x().XGetWindowProperty(_open(), xid, atom(prop), 0, max_len, 0, req_type,
                                  ctypes.byref(actual_type), ctypes.byref(fmt), ctypes.byref(nitems),
                                  ctypes.byref(after), ctypes.byref(data))
     if rc != 0 or not data.value:
@@ -156,7 +165,7 @@ def _get_property(xid: int, prop: str, req_type: int, max_len: int = 4096) -> tu
             raw = b""
         return fmt.value, n, raw
     finally:
-        _lib.XFree(data)
+        _x().XFree(data)
 
 
 def _ulongs(raw: bytes, n: int) -> list[int]:
@@ -164,12 +173,12 @@ def _ulongs(raw: bytes, n: int) -> list[int]:
 
 
 def client_windows() -> list[int]:
-    r = _get_property(_lib.XDefaultRootWindow(_open()), "_NET_CLIENT_LIST", XA_WINDOW)
+    r = _get_property(_root(), "_NET_CLIENT_LIST", XA_WINDOW)
     return _ulongs(r[2], r[1]) if r else []
 
 
 def active_window() -> int:
-    r = _get_property(_lib.XDefaultRootWindow(_open()), "_NET_ACTIVE_WINDOW", XA_WINDOW)
+    r = _get_property(_root(), "_NET_ACTIVE_WINDOW", XA_WINDOW)
     vals = _ulongs(r[2], r[1]) if r else []
     return vals[0] if vals else 0
 
@@ -201,9 +210,9 @@ def activate(xid: int, timestamp: int = 0) -> None:
     ev.xclient.format = 32
     ev.xclient.data[0] = 2  # source indication: pager/taskbar (user action)
     ev.xclient.data[1] = timestamp
-    root = _lib.XDefaultRootWindow(_open())
-    _lib.XSendEvent(_open(), root, 0, SubstructureRedirectMask | SubstructureNotifyMask, ctypes.byref(ev))
-    _lib.XFlush(_open())
+    root = _root()
+    _x().XSendEvent(_open(), root, 0, SubstructureRedirectMask | SubstructureNotifyMask, ctypes.byref(ev))
+    _x().XFlush(_open())
 
 
 def close_window(xid: int, timestamp: int = 0) -> None:
@@ -216,9 +225,9 @@ def close_window(xid: int, timestamp: int = 0) -> None:
     ev.xclient.format = 32
     ev.xclient.data[0] = timestamp
     ev.xclient.data[1] = 2
-    root = _lib.XDefaultRootWindow(_open())
-    _lib.XSendEvent(_open(), root, 0, SubstructureRedirectMask | SubstructureNotifyMask, ctypes.byref(ev))
-    _lib.XFlush(_open())
+    root = _root()
+    _x().XSendEvent(_open(), root, 0, SubstructureRedirectMask | SubstructureNotifyMask, ctypes.byref(ev))
+    _x().XFlush(_open())
 
 
 def watch_root(callback: Callable[[], None]) -> int:
@@ -230,16 +239,16 @@ def watch_root(callback: Callable[[], None]) -> int:
     from gi.repository import GLib
 
     dpy = _open()
-    root = _lib.XDefaultRootWindow(dpy)
-    _lib.XSelectInput(dpy, root, PropertyChangeMask)
-    _lib.XFlush(dpy)
+    root = _x().XDefaultRootWindow(dpy)
+    _x().XSelectInput(dpy, root, PropertyChangeMask)
+    _x().XFlush(dpy)
     watched = {atom("_NET_CLIENT_LIST"), atom("_NET_ACTIVE_WINDOW")}
     ev = XEvent()
 
     def on_readable(_fd, _cond):
         fire = False
-        while _lib.XPending(dpy):
-            _lib.XNextEvent(dpy, ctypes.byref(ev))
+        while _x().XPending(dpy):
+            _x().XNextEvent(dpy, ctypes.byref(ev))
             if ev.type == PropertyNotify:
                 # XPropertyEvent.atom is the 6th long-sized field.
                 if ev.pad[5] in watched:
@@ -248,4 +257,4 @@ def watch_root(callback: Callable[[], None]) -> int:
             callback()
         return GLib.SOURCE_CONTINUE
 
-    return GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, _lib.XConnectionNumber(dpy), GLib.IOCondition.IN, on_readable)
+    return GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, _x().XConnectionNumber(dpy), GLib.IOCondition.IN, on_readable)

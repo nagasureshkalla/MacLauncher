@@ -131,3 +131,17 @@ Generated 2026-10-26 21:50:36 in 5.4s. All checks are read-only.
 - **Reset the tracker file index (cache only)** — Deletes only tracker's own index database in ~/.cache/tracker3; it is rebuilt automatically. Your files are not touched.  
   Command: `tracker3 reset --filesystem`  
   Undo: `Nothing to undo: the index is rebuilt on next login.`
+
+## Analyst notes (manual follow-up, 2026-10-26)
+
+- **Ruled out — `evergy-rates.service` (2 min 52 s):** a `Type=oneshot` unit started by
+  `evergy-rates.timer`; nothing is ordered after it (`list-dependencies --reverse` is empty),
+  so it does not delay the session or other apps.
+- **History:** "Unable to register the application … NoReply" for Nautilus (Oct 24) and
+  Calculator (Oct 22): a second launch waited on a hung primary instance over D-Bus. This
+  matches the "click and nothing happens for minutes" symptom.
+- **Not observed live:** no hang reproduced during this session; D-Bus answered in < 10 ms.
+  The tracker finding is verified as a fault; that it *causes* the multi-minute delays is
+  the most likely explanation, not a proven one.
+- **Suggested order:** run `nova-launcher --repair` (two confirmations), log out/in, and
+  move large project trees off `~/Desktop` (e.g. to `~/Projects`) if Files is still slow.

@@ -76,6 +76,8 @@ class _Entry:
     generic_words: list[str]
     category_words: list[str]
     description_words: list[str]
+    name_chars: frozenset
+    typo_words: list[str]
 
 
 def _build_entry(r: AppRecord) -> _Entry:
@@ -104,6 +106,8 @@ def _build_entry(r: AppRecord) -> _Entry:
         generic_words=words(r.generic_name),
         category_words=cat_words,
         description_words=words(r.description),
+        name_chars=frozenset(name),
+        typo_words=list(dict.fromkeys(name_words + [w for k in kws for w in k.split()] + ids[:2])),
     )
 
 
@@ -202,13 +206,17 @@ class SearchEngine:
         if not self.fuzzy:
             return 0
         best = 0.0
-        if len(t) >= 2:
+        # Cheap rejection first: a subsequence needs every query character.
+        if len(t) >= 2 and set(t) <= e.name_chars:
             f = fuzzy_subsequence(t, e.name)
             if f > 0.35:
                 best = 100 + 200 * f
         limit = _typo_limit(len(t))
         if limit:
-            for w in e.name_words + e.keyword_words + e.ids[:2]:
+            for w in e.typo_words:
+                # Typos rarely hit the first letter; also allow a swapped first pair.
+                if not w or (w[0] != t[0] and not (len(w) > 1 and w[1] == t[0] and w[0] == t[1])):
+                    continue
                 # Compare against the word, or its prefix of similar length so
                 # "firefx" still matches "firefox" while typing.
                 cand = w[: len(t) + 1] if len(w) > len(t) + 1 else w

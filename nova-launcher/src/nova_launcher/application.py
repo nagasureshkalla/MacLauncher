@@ -102,6 +102,9 @@ class NovaApplication(Adw.Application):
         self._apply_theme()
         self.hold()
         self._held = True
+        # Runs after command-line handling (so --no-dock is respected) and also
+        # covers D-Bus activation, which has no command line at all.
+        GLib.idle_add(lambda: (self.update_dock_visibility(), GLib.SOURCE_REMOVE)[1])
         log.info("startup done in %.0f ms (apps from cache: %s)",
                  (time.perf_counter() - self.t_start) * 1000, len(self.index) if cached else "no")
 

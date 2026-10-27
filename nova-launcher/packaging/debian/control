@@ -1,0 +1,13 @@
+Package: nova-launcher
+Version: @VERSION@
+Section: gnome
+Priority: optional
+Architecture: all
+Installed-Size: @SIZE@
+Depends: python3 (>= 3.10), python3-gi (>= 3.42), python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.4), libglib2.0-bin, libx11-6
+Recommends: gnome-shell
+Maintainer: Nova Launcher <sureshkalla554@gmail.com>
+Description: Fast macOS-inspired launcher for GNOME
+ A lightweight GTK 4 / libadwaita application launcher with a magnifying
+ dock (X11), a Launchpad-style application grid, an instant quick-search
+ window and read-only diagnostics for slow application and Files start-up.

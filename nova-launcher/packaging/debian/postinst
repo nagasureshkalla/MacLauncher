@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
+    command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
+    python3 -m compileall -q /usr/lib/nova-launcher/nova_launcher >/dev/null 2>&1 || true
+fi
