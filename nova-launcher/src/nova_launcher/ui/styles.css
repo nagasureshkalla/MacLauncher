@@ -329,6 +329,13 @@ window.nova-grid-window.nova-light .nova-grid-dim { background-color: rgba(255, 
 .nova-island-tile:hover { background-color: rgba(255, 255, 255, 0.10); }
 .nova-island-tile:active { transform: scale(0.94); }
 .nova-island-tile image { -gtk-icon-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
+.nova-island-usage {
+  font-size: 9px;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  color: rgba(245, 245, 247, 0.9);
+  margin-bottom: 2px;
+}
 .nova-island-tile-name { font-size: 11px; font-weight: 500; line-height: 1.15; }
 .nova-island-dot {
   min-width: 4px;

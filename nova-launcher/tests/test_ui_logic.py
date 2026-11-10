@@ -211,3 +211,29 @@ def test_island_geometry():
     assert island_header([RunningApp("t", "Terminal", "", None, [1, 2, 3], ["a", "b", "c"])]) == "3 windows · 1 app"
     v = strut_values("top", 76, (1280, 0, 1920, 1080), (3200, 1191))
     assert v[2] == 76 and (v[8], v[9]) == (1280, 3199) and sum(v) == 76 + 1280 + 3199
+
+
+def test_process_stats_parsers_and_formatting():
+    from nova_launcher.system.process_stats import (PAGE, descendants, format_percent, parse_fdinfo, parse_pmon,
+                                                    parse_stat, percent)
+
+    st = parse_stat("42 (Web Content) x) S 7 42 42 0 -1 4194560 1 0 0 0 30 12 0 0 20 0 9 0 100 900 250 0 0")
+    assert (st.ppid, st.ticks, st.rss) == (7, 42, 250 * PAGE)
+    assert descendants({2: 1, 3: 2, 4: 2, 5: 9}, 2) == {2, 3, 4}
+
+    pmon = """# gpu         pid   type     sm    mem    enc    dec    jpg    ofa     fb   ccpm    command
+# Idx           #    C/G      %      %      %      %      %      %     MB     MB    name
+    0       3846     G      7      1      -      -      -      -    139      0    Xorg
+    0       4825     G      -      -      -      -      -      -      6      0    xdg-desktop-por
+    1       3846     G      3      -      -      -      -      -     11      0    Xorg
+"""
+    assert parse_pmon(pmon) == {3846: (10.0, 150 * 1024 ** 2), 4825: (0.0, 6 * 1024 ** 2)}
+
+    fd = "drm-driver:\tamdgpu\ndrm-pdev:\t0000:03:00.0\ndrm-client-id:\t12\n" \
+         "drm-engine-gfx:\t1000 ns\ndrm-engine-compute:\t500 ns\ndrm-memory-vram:\t2048 KiB\n"
+    assert parse_fdinfo(fd) == ("0000:03:00.0/12", 1500, 2048 * 1024)
+    assert parse_fdinfo("pos: 0\nflags: 02\n") is None
+
+    assert (percent(1, 8), percent(5, 0), percent(9, 4)) == (12.5, 0.0, 100.0)
+    assert [format_percent(p) for p in (None, 0, 1.2, 8.4, 13, 57.6, 230)] \
+        == ["--%", "00%", "01%", "08%", "13%", "58%", "100%"]

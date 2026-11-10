@@ -52,12 +52,16 @@ they never capture other windows.
   (three terminals = three tiles, each labelled with its window title; most
   recently used app first, a green dot on the focused window) — click a tile
   to switch to that window, right-click to Close Window, open a New Window or
-  Quit the app. **Scroll** over the compact pill to flip between apps. By
+  Quit the app. Above each tile's icon is the app's live **CPU, GPU, RAM and
+  VRAM** use as two-digit percentages (`CPU: 01%`), summed over its whole
+  process tree: CPU of all cores, RAM of total memory, VRAM of total video memory
+  (GPU/VRAM come from `nvidia-smi` on NVIDIA, else the kernel's DRM fdinfo); it
+  is sampled every 1.5 s only while the island is expanded. **Scroll** over the compact pill to flip between apps. By
   default it **auto-hides** so windows get the full screen: touch the area
   just under the GNOME top bar (centre) to slide it back down. Turn
   auto-hide off in Settings → General → Dynamic Island to keep it visible
   (then maximized windows stop below it, unless *Keep windows below it* is off). Uses the
-  same event-driven window list as the dock: no polling, zero idle CPU.
+  same event-driven window list as the dock: no polling, zero idle CPU when collapsed.
 * **Commands widget** (X11): a small panel in a screen corner listing every
   Nova command — **All Applications** first, then Quick Search, Files,
   Downloads, Show/Hide Dock, Settings, Diagnose, Repair, Quit — with their

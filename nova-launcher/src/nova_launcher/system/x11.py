@@ -268,6 +268,13 @@ def window_title(xid: int) -> str:
     return ""
 
 
+def window_pid(xid: int) -> int:
+    """Process that owns ``xid`` (_NET_WM_PID), or 0 when the client does not say."""
+    r = _get_property(xid, "_NET_WM_PID", XA_CARDINAL)
+    vals = _ulongs(r[2], r[1]) if r else []
+    return vals[0] if vals else 0
+
+
 def skips_taskbar(xid: int) -> bool:
     r = _get_property(xid, "_NET_WM_STATE", XA_ATOM)
     return bool(r) and atom("_NET_WM_STATE_SKIP_TASKBAR") in _ulongs(r[2], r[1])

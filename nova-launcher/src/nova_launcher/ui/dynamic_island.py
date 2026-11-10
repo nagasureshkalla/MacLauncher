@@ -8,7 +8,9 @@ pill morphs smoothly between them):
 * expanded  on hover or click: every running app as a tile; click to switch
             one tile per open window (three terminals = three tiles, each
             labelled with its window title); click to switch, right-click
-            for Close Window, New Window and Quit.
+            for Close Window, New Window and Quit.  Above each icon: the
+            app's live CPU, GPU, RAM and VRAM use as 'CPU: 01%' (whole process tree),
+            sampled in the background only while expanded.
 
 Scrolling over the compact pill switches to the next/previous app.
 
@@ -35,6 +37,7 @@ from gi.repository import Gdk, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
 from ..core.running_apps import RunningApp, next_window  # noqa: E402
 from ..system import x11  # noqa: E402
+from ..system.process_stats import Usage, UsageSampler, format_percent  # noqa: E402
 from .dock import ALL_APPS_ICON  # noqa: E402
 from .widgets import gicon_for, popup_menu, record_gicon  # noqa: E402
 
@@ -43,12 +46,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("nova.island")
 
-WIDTH, HEIGHT = 700, 440  # fixed window: room for the largest pill + shadow
+WIDTH, HEIGHT = 700, 560  # fixed window: room for the largest pill + shadow
 TOP_GAP = 5  # between the GNOME top bar and the pill
 COMPACT_H = 36
 COMPACT_W = 280
 IDLE_W = 132
-TILE_W = 92
+TILE_W = 100
+TILE_H = 140  # usage readout, icon, two-line title
 PER_ROW = 6
 MAX_ROWS = 3
 PEEK_ICONS = 3
@@ -115,6 +119,17 @@ class IslandTile(Gtk.Box):
             self.add_css_class("active")
         self.set_size_request(TILE_W - 8, -1)
         self.set_valign(Gtk.Align.START)
+        self.pid = x11.window_pid(xid)
+
+        usage = Gtk.Grid(column_homogeneous=True, column_spacing=4, halign=Gtk.Align.FILL)
+        usage.add_css_class("nova-island-usage")
+        self._usage: dict[str, Gtk.Label] = {}
+        for i, key in enumerate(("CPU", "GPU", "RAM", "VRAM")):
+            lbl = Gtk.Label(xalign=0.5)
+            self._usage[key] = lbl
+            usage.attach(lbl, i % 2, i // 2, 1, 1)
+        self.append(usage)
+        self.set_usage(None)
 
         img = _app_image(app, 46)
         img.set_halign(Gtk.Align.CENTER)
@@ -135,6 +150,12 @@ class IslandTile(Gtk.Box):
         motion = Gtk.EventControllerMotion()
         motion.connect("enter", lambda *_: island.show_detail(app, self.title))
         self.add_controller(motion)
+
+    def set_usage(self, u: Usage | None) -> None:
+        values = {"CPU": u.cpu if u else None, "GPU": u.gpu if u else None,
+                  "RAM": u.ram if u else None, "VRAM": u.vram if u else None}
+        for key, value in values.items():
+            self._usage[key].set_text(f"{key}: {format_percent(value)}")
 
     def _on_click(self, gesture, _n, _x, _y) -> None:
         button = gesture.get_current_button()
@@ -172,6 +193,9 @@ class DynamicIsland(Gtk.Window):
         self._tick = 0
         self._menu_open = False
         self._tracking = False
+        self.tiles: list[IslandTile] = []
+        self._usage: dict[int, Usage] = {}  # last sample, so rebuilt tiles keep their numbers
+        self.sampler = UsageSampler(self._on_usage)
 
         self.hidden = False
         self._hide_timer = 0
@@ -226,7 +250,7 @@ class DynamicIsland(Gtk.Window):
                                 max_children_per_line=PER_ROW, row_spacing=6, column_spacing=0)
         self.flow.add_css_class("nova-island-flow")
         self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER,
-                                           propagate_natural_height=True, max_content_height=MAX_ROWS * 108)
+                                           propagate_natural_height=True, max_content_height=MAX_ROWS * TILE_H)
         self.scroller.set_child(self.flow)
         self.expanded.append(self.scroller)
         # max_width_chars=1: the title line must never widen the pill (it would
@@ -384,15 +408,25 @@ class DynamicIsland(Gtk.Window):
         self.header_label.set_text(island_header(self.apps))
         self.flow.remove_all()
         active = self.app.windows.active
-        n = 0
-        for a in self.apps:
-            for xid, title in zip(a.windows, a.titles):
-                self.flow.append(IslandTile(self, a, xid, title, xid == active))
-                n += 1
+        tiles = [IslandTile(self, a, xid, title, xid == active)
+                 for a in self.apps for xid, title in zip(a.windows, a.titles)]
+        for tile in tiles:
+            tile.set_usage(self._usage.get(tile.pid))
+            self.flow.append(tile)
+        self.tiles = tiles
+        n = len(tiles)
+        self.sampler.watch(t.pid for t in tiles)
         self.flow.set_min_children_per_line(min(max(n, 1), PER_ROW))
         self.expanded.set_size_request(island_width(n), -1)
         front = self.apps[0] if self.apps else None
         self.show_detail(front, front.titles[0] if front else "")
+
+    def _on_usage(self, sample: dict[int, Usage]) -> None:
+        if self.state != "expanded":
+            return
+        self._usage = sample
+        for tile in self.tiles:
+            tile.set_usage(sample.get(tile.pid))
 
     def show_detail(self, app: RunningApp | None, title: str = "") -> None:
         if app is None:
@@ -421,6 +455,7 @@ class DynamicIsland(Gtk.Window):
 
     def collapse(self) -> None:
         self._cancel(("_open_timer", "_close_timer"))
+        self.sampler.stop()
         self.state = "compact"
         self._render()
 
